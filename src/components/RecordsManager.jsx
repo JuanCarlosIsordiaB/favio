@@ -15,8 +15,48 @@ import {
   Package,
   Building2,
   MapPin,
-  Map
+  Map,
+  Eye
 } from 'lucide-react';
+
+// Función para traducir módulos técnicos a nombres amigables en español
+const translateModule = (modulo) => {
+  if (!modulo) return '-';
+  
+  const moduleMap = {
+    'purchase_orders': 'Órdenes de Compra',
+    'modulo_08_finanzas': 'Módulo 08 - Finanzas',
+    'firmas': 'Firmas',
+    'work_manager': 'Gestor de Trabajos',
+    'personnel_manager': 'Gestor de Personal',
+    'integration_manager': 'Gestor de Integraciones',
+    'machinery_manager': 'Gestor de Maquinaria',
+    'performance_evaluations': 'Evaluaciones de Desempeño',
+    'alertas_automaticas': 'Alertas Automáticas',
+    'alertas_recordatorios': 'Alertas y Recordatorios',
+    'modulo_17_ventas': 'Módulo 17 - Ventas',
+    'monitoring_integration': 'Integración de Monitoreo',
+    'modulo_11': 'Módulo 11',
+    'livestock_monitoring': 'Monitoreo de Ganado',
+    'rainfall_manager': 'Gestor de Lluvias',
+    'seed_analysis': 'Análisis de Semillas',
+    'agricultural_monitoring': 'Monitoreo Agrícola',
+    'soil_analysis': 'Análisis de Suelos',
+    'gestiones': 'Gestiones',
+    'remittances': 'Remesas',
+    'remitos': 'Remitos',
+    'lotes_y_mapas': 'Lotes y Mapas',
+    'lotes': 'Lotes',
+    'input_manager': 'Gestor de Insumos',
+    'insumos': 'Insumos',
+    'projections': 'Proyecciones',
+    'stock_movement': 'Movimiento de Stock',
+    'predios': 'Predios',
+    'payment_orders': 'Órdenes de Pago'
+  };
+  
+  return moduleMap[modulo] || modulo;
+};
 
 const colorClasses = {
   red: 'bg-red-100 text-red-600 border-red-200 bg-red-50 text-red-700',
@@ -223,6 +263,7 @@ export default function RecordsManager({ firmId, premiseId }) {
                     <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wide">Usuario</th>
                     <th className="px-4 py-3 text-left text-xs font-semibold text-slate-700 uppercase tracking-wide">Módulo Origen</th>
                     <th className="px-4 py-3 text-right text-xs font-semibold text-slate-700 uppercase tracking-wide">Fecha/Hora</th>
+                    <th className="px-4 py-3 text-center text-xs font-semibold text-slate-700 uppercase tracking-wide">Acciones</th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-slate-200">
@@ -233,8 +274,7 @@ export default function RecordsManager({ firmId, premiseId }) {
                     return (
                       <tr
                         key={record.id}
-                        onClick={() => setSelectedRecord(record)}
-                        className="hover:bg-slate-50 cursor-pointer transition-colors"
+                        className="hover:bg-slate-50 transition-colors"
                       >
                         <td className="px-4 py-3 whitespace-nowrap">
                           <div className="flex items-center gap-2">
@@ -256,7 +296,7 @@ export default function RecordsManager({ firmId, premiseId }) {
                           <p className="text-sm text-slate-600">{record.usuario}</p>
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap">
-                          <p className="text-sm text-slate-600">{record.moduloOrigen || '-'}</p>
+                          <p className="text-sm text-slate-600">{translateModule(record.moduloOrigen)}</p>
                         </td>
                         <td className="px-4 py-3 whitespace-nowrap text-right">
                           <p className="text-sm font-medium text-slate-600">
@@ -268,6 +308,19 @@ export default function RecordsManager({ firmId, premiseId }) {
                               minute: '2-digit'
                             })}
                           </p>
+                        </td>
+                        <td className="px-4 py-3 whitespace-nowrap text-center">
+                          <button
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setSelectedRecord(record);
+                            }}
+                            className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs font-medium text-blue-600 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors"
+                            title="Ver más detalles"
+                          >
+                            <Eye size={14} />
+                            Ver detalles
+                          </button>
                         </td>
                       </tr>
                     );

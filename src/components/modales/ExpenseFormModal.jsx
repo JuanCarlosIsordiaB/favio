@@ -449,13 +449,14 @@ export function ExpenseFormModal({
     e.preventDefault();
     if (!validateForm()) return;
 
-    // Limpiar campos UUID vacíos (convertir a null)
+    // Limpiar campos UUID vacíos (convertir a null) - estos campos son opcionales
     const cleanedData = {
       ...formData,
-      event_id: formData.event_id?.trim() ? formData.event_id : null,
+      account_id: formData.account_id?.trim() ? formData.account_id : null,
+      cost_center_id: formData.cost_center_id?.trim() ? formData.cost_center_id : null,
       agricultural_work_id: formData.agricultural_work_id?.trim() ? formData.agricultural_work_id : null,
       livestock_work_id: formData.livestock_work_id?.trim() ? formData.livestock_work_id : null,
-      cost_center_id: formData.cost_center_id?.trim() ? formData.cost_center_id : null
+      event_id: formData.event_id?.trim() ? formData.event_id : null
     };
 
     await onSubmit(cleanedData);
@@ -876,111 +877,6 @@ export function ExpenseFormModal({
                     {errors.total_amount}
                   </div>
                 )}
-              </div>
-            </div>
-          </div>
-
-          {/* Centro de Costo y Asociaciones */}
-          <div>
-            <h3 className="font-semibold mb-3">Imputación Contable</h3>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="account_id">Cuenta Contable</Label>
-                <Select
-                  value={formData.account_id || ''}
-                  onValueChange={(value) => handleSelectChange('account_id', value)}
-                  disabled={isLoading}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Seleccionar cuenta" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {accounts.map(acc => (
-                      <SelectItem key={acc.id} value={acc.id}>
-                        {acc.code} - {acc.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div>
-                <Label htmlFor="cost_center_id">Centro de Costo</Label>
-                <Select
-                  value={formData.cost_center_id || ''}
-                  onValueChange={(value) => handleSelectChange('cost_center_id', value)}
-                  disabled={isLoading}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Seleccionar centro de costo" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {costCenters.map(cc => (
-                      <SelectItem key={cc.id} value={cc.id}>
-                        {cc.code} - {cc.name}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-            </div>
-          </div>
-
-          {/* Asociaciones con Trabajos */}
-          <div>
-            <h3 className="font-semibold mb-3">Asociaciones con Trabajos</h3>
-            <div className="grid grid-cols-2 gap-4">
-
-              <div>
-                <Label htmlFor="agricultural_work_id">Trabajo Agrícola</Label>
-                <Select
-                  value={formData.agricultural_work_id || ''}
-                  onValueChange={(value) => handleSelectChange('agricultural_work_id', value)}
-                  disabled={isLoading}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Seleccionar trabajo agrícola" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {agriculturalWorks.map(aw => (
-                      <SelectItem key={aw.id} value={aw.id}>
-                        {aw.work_type} - {new Date(aw.date).toLocaleDateString()}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div>
-                <Label htmlFor="livestock_work_id">Trabajo Ganadero</Label>
-                <Select
-                  value={formData.livestock_work_id || ''}
-                  onValueChange={(value) => handleSelectChange('livestock_work_id', value)}
-                  disabled={isLoading}
-                >
-                  <SelectTrigger>
-                    <SelectValue placeholder="Seleccionar trabajo ganadero" />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {livestockWorks.map(lw => (
-                      <SelectItem key={lw.id} value={lw.id}>
-                        {lw.work_type} - {new Date(lw.date).toLocaleDateString()}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-              </div>
-
-              <div>
-                <Label htmlFor="event_id">Evento Productivo (UUID)</Label>
-                <Input
-                  id="event_id"
-                  name="event_id"
-                  value={formData.event_id}
-                  onChange={handleChange}
-                  placeholder="ID del evento productivo"
-                  disabled={isLoading}
-                />
               </div>
             </div>
           </div>

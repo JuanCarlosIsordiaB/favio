@@ -33,13 +33,28 @@ const statusBadgeColors = {
   CANCELLED: 'bg-red-200 text-red-800'
 };
 
+// Etiquetas estándar para el filtro (sin considerar payment_terms)
 const statusLabels = {
   DRAFT: 'Borrador',
   REGISTERED: 'Registrada',
-  APPROVED: 'Aprobada',
+  APPROVED: 'Crédito',
   PAID_PARTIAL: 'Pagada Parcial',
-  PAID: 'Pagada',
+  PAID: 'Contado',
   CANCELLED: 'Anulada'
+};
+
+// Función para obtener la etiqueta del estado considerando payment_terms
+const getStatusLabel = (expense) => {
+  // Si es contado y está pagada, mostrar "Contado"
+  if (expense.status === 'PAID' && expense.payment_terms === 'contado') {
+    return 'Contado';
+  }
+  // Si es aprobada y no es contado, mostrar "Crédito"
+  if (expense.status === 'APPROVED' && expense.payment_terms !== 'contado') {
+    return 'Crédito';
+  }
+  // Para otros casos, usar las etiquetas estándar
+  return statusLabels[expense.status] || expense.status;
 };
 
 /**
@@ -318,7 +333,7 @@ export function ExpenseListView({ firmId, onAdd = () => {}, onSelectForPayment =
                 <TableRow key={expense.id} className="hover:bg-gray-50">
                   <TableCell>
                     <Badge className={statusBadgeColors[expense.status]}>
-                      {statusLabels[expense.status]}
+                      {getStatusLabel(expense)}
                     </Badge>
                   </TableCell>
                   <TableCell className="font-medium">
@@ -353,7 +368,7 @@ export function ExpenseListView({ firmId, onAdd = () => {}, onSelectForPayment =
                         <Eye size={16} />
                       </button>
 
-                      {['DRAFT', 'REGISTERED'].includes(expense.status) && (
+                      {['REGISTERED'].includes(expense.status) && (
                         <button
                           className="text-amber-600 hover:text-amber-800 p-1 rounded hover:bg-amber-50"
                           onClick={() => handleOpenModal(expense)}
@@ -363,7 +378,7 @@ export function ExpenseListView({ firmId, onAdd = () => {}, onSelectForPayment =
                         </button>
                       )}
 
-                      {['DRAFT', 'REGISTERED'].includes(expense.status) && (
+                      {['REGISTERED'].includes(expense.status) && (
                         <button
                           className="text-green-600 hover:text-green-800 p-1 rounded hover:bg-green-50"
                           onClick={() => handleApprove(expense)}

@@ -88,7 +88,14 @@ export async function crearFactura(facturaData) {
     const subtotal = facturaData.subtotal || 0;
     const ivaAmount = facturaData.iva_amount || 0;
     const totalAmount = facturaData.total_amount || (subtotal + ivaAmount);
-    const balance = totalAmount;
+    
+    // Determinar estado y balance según condiciones de pago
+    // Si es "contado", la factura está pagada. Si es crédito, está aprobada pendiente de pago.
+    const isContado = facturaData.payment_terms === 'contado';
+    const status = isContado ? 'PAID' : 'APPROVED';
+    const balance = isContado ? 0 : totalAmount; // Si es contado, no hay saldo pendiente
+    const paidAmount = isContado ? totalAmount : 0; // Si es contado, está completamente pagada
+    const paymentStatus = isContado ? 'paid' : 'pending';
 
     // Preparar objeto - remover campos que no existen en la tabla
     const factura = {
@@ -109,9 +116,9 @@ export async function crearFactura(facturaData) {
       iva_amount: ivaAmount,
       total_amount: totalAmount,
       balance,
-      paid_amount: 0,
-      status: 'DRAFT',
-      payment_status: 'pending',
+      paid_amount: paidAmount,
+      status: status, // PAID si es contado, APPROVED si es crédito
+      payment_status: paymentStatus,
       payment_terms: facturaData.payment_terms,
       due_date: facturaData.due_date || null,
       alert_days: facturaData.alert_days || 5,
@@ -133,6 +140,43 @@ export async function crearFactura(facturaData) {
 
     if (error) throw error;
 
+    // Preparar metadata completo con todos los detalles de la factura
+    const metadata = {
+      invoice_series: facturaData.invoice_series,
+      invoice_number: facturaData.invoice_number,
+      invoice_full: `${facturaData.invoice_series}-${facturaData.invoice_number}`,
+      invoice_date: facturaData.invoice_date,
+      provider_name: facturaData.provider_name,
+      provider_rut: facturaData.provider_rut || null,
+      provider_email: facturaData.provider_email || null,
+      provider_phone: facturaData.provider_phone || null,
+      provider_address: facturaData.provider_address || null,
+      category: facturaData.category,
+      concept: facturaData.concept || null,
+      currency: facturaData.currency,
+      status: status,
+      payment_terms: facturaData.payment_terms || null,
+      due_date: facturaData.due_date || null,
+      notes: facturaData.notes || null,
+      items_count: facturaData.items?.length || 0,
+      items: facturaData.items ? facturaData.items.map(item => ({
+        concept: item.concept,
+        description: item.concept, // Alias para compatibilidad
+        quantity: item.quantity,
+        unit: item.unit,
+        unit_price: item.unit_price,
+        tax_rate: item.tax_rate,
+        subtotal: (item.quantity || 0) * (item.unit_price || 0),
+        tax_amount: ((item.quantity || 0) * (item.unit_price || 0)) * ((item.tax_rate || 22) / 100),
+        total: ((item.quantity || 0) * (item.unit_price || 0)) * (1 + (item.tax_rate || 22) / 100)
+      })) : [],
+      subtotal: subtotal,
+      iva_amount: ivaAmount,
+      tax_amount: ivaAmount, // Alias
+      total_amount: totalAmount,
+      amount: totalAmount // Alias para compatibilidad
+    };
+
     // Auditoría
     await crearRegistro({
       firmId: facturaData.firm_id,
@@ -141,11 +185,7 @@ export async function crearFactura(facturaData) {
       moduloOrigen: 'modulo_08_finanzas',
       usuario: facturaData.created_by || 'sistema',
       referencia: data.id,
-      metadata: {
-        amount: totalAmount,
-        provider: data.provider_name,
-        invoice_full: `${data.invoice_series}-${data.invoice_number}`
-      }
+      metadata: metadata
     });
 
     return { data, error: null };

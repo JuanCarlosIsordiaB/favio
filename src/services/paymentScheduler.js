@@ -226,8 +226,9 @@ export async function generateExpensesFromPurchaseOrder(purchaseOrder, firmId, u
       balance: cuota.amount, // Inicialmente sin pagar
       paid_amount: 0,
 
-      // Estado
-      status: 'DRAFT', // Usuario debe aprobar
+      // Estado - Las facturas no pueden estar en DRAFT, deben estar en APPROVED (crédito)
+      // Estas son facturas generadas desde órdenes de compra, por lo que son crédito
+      status: 'APPROVED', // Facturas de crédito aprobadas pendientes de pago
       payment_status: 'pending',
 
       // Metadatos de programación

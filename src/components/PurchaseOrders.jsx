@@ -24,10 +24,13 @@ import {
   Send,
   Package,
   ChevronDown,
-  AlertCircle
+  AlertCircle,
+  Download,
+  Mail
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { toast } from 'sonner';
+import { generatePurchaseOrderPDF } from '../services/purchaseOrderExports';
 
 export default function PurchaseOrders({ firmId }) {
   const { user } = useAuth();
@@ -47,6 +50,7 @@ export default function PurchaseOrders({ firmId }) {
     supplier_address: '',
     status: 'draft',
     currency: 'UYU',
+    exchange_rate: '',
     delivery_date: '',
     delivery_address: '',
     payment_terms: '',
@@ -76,7 +80,7 @@ export default function PurchaseOrders({ firmId }) {
   // Calcular preview de cronograma de pagos cuando cambia payment_terms o items
   useEffect(() => {
     if (formData.payment_terms && formData.payment_terms !== '') {
-      const { subtotal, taxAmount, total } = calculateTotals();
+      const { subtotal, taxAmount, total, subtotalUYU, taxAmountUYU, totalUYU } = calculateTotals();
       const preview = parsePaymentTerms(
         formData.payment_terms,
         total,
@@ -87,6 +91,38 @@ export default function PurchaseOrders({ firmId }) {
       setSchedulePreview([]);
     }
   }, [formData.payment_terms, formData.items, formData.order_date]);
+
+  // Recalcular conversión de items cuando cambia el tipo de cambio o la moneda
+  useEffect(() => {
+    if (formData.items.length > 0 && formData.currency === 'USD' && formData.exchange_rate) {
+      const exchangeRate = parseFloat(formData.exchange_rate);
+      if (exchangeRate > 0) {
+        const updatedItems = formData.items.map(item => {
+          const subtotal = parseFloat(item.subtotal || 0);
+          const taxAmount = parseFloat(item.tax_amount || 0);
+          const total = parseFloat(item.total || 0);
+          
+          return {
+            ...item,
+            subtotal_uyu: (subtotal * exchangeRate).toFixed(2),
+            tax_amount_uyu: (taxAmount * exchangeRate).toFixed(2),
+            total_uyu: (total * exchangeRate).toFixed(2)
+          };
+        });
+        
+        // Solo actualizar si hay cambios para evitar loops infinitos
+        const hasChanges = updatedItems.some((item, idx) => 
+          item.subtotal_uyu !== formData.items[idx]?.subtotal_uyu ||
+          item.tax_amount_uyu !== formData.items[idx]?.tax_amount_uyu ||
+          item.total_uyu !== formData.items[idx]?.total_uyu
+        );
+        
+        if (hasChanges) {
+          setFormData(prev => ({ ...prev, items: updatedItems }));
+        }
+      }
+    }
+  }, [formData.exchange_rate, formData.currency]);
 
   async function fetchOrders() {
     try {
@@ -134,13 +170,31 @@ export default function PurchaseOrders({ firmId }) {
   const addItemToOrder = () => {
     if (!validateItem()) return;
 
+    // Validar tipo de cambio si la moneda es USD
+    if (formData.currency === 'USD' && (!formData.exchange_rate || parseFloat(formData.exchange_rate) <= 0)) {
+      toast.error('Ingresa el tipo de cambio del dólar');
+      return;
+    }
+
     const qty = parseFloat(currentItem.quantity);
     const price = parseFloat(currentItem.unit_price);
     const taxRate = parseFloat(currentItem.tax_rate) || 0;
+    const exchangeRate = parseFloat(formData.exchange_rate) || 1;
 
     const subtotal = qty * price;
     const taxAmount = subtotal * (taxRate / 100);
     const total = subtotal + taxAmount;
+
+    // Calcular equivalente en pesos si la moneda es USD
+    let subtotalUYU = subtotal;
+    let taxAmountUYU = taxAmount;
+    let totalUYU = total;
+    
+    if (formData.currency === 'USD' && exchangeRate > 0) {
+      subtotalUYU = subtotal * exchangeRate;
+      taxAmountUYU = taxAmount * exchangeRate;
+      totalUYU = total * exchangeRate;
+    }
 
     const newItem = {
       ...currentItem,
@@ -148,7 +202,11 @@ export default function PurchaseOrders({ firmId }) {
       unit_price: price,
       subtotal: subtotal.toFixed(2),
       tax_amount: taxAmount.toFixed(2),
-      total: total.toFixed(2)
+      total: total.toFixed(2),
+      // Guardar también los valores en pesos para referencia
+      subtotal_uyu: subtotalUYU.toFixed(2),
+      tax_amount_uyu: taxAmountUYU.toFixed(2),
+      total_uyu: totalUYU.toFixed(2)
     };
 
     setFormData(prev => ({
@@ -179,7 +237,20 @@ export default function PurchaseOrders({ firmId }) {
     const subtotal = formData.items.reduce((sum, item) => sum + parseFloat(item.subtotal || 0), 0);
     const taxAmount = formData.items.reduce((sum, item) => sum + parseFloat(item.tax_amount || 0), 0);
     const total = formData.items.reduce((sum, item) => sum + parseFloat(item.total || 0), 0);
-    return { subtotal, taxAmount, total };
+    
+    // Calcular equivalentes en pesos si la moneda es USD
+    let subtotalUYU = subtotal;
+    let taxAmountUYU = taxAmount;
+    let totalUYU = total;
+    
+    if (formData.currency === 'USD' && formData.exchange_rate) {
+      const exchangeRate = parseFloat(formData.exchange_rate) || 1;
+      subtotalUYU = subtotal * exchangeRate;
+      taxAmountUYU = taxAmount * exchangeRate;
+      totalUYU = total * exchangeRate;
+    }
+    
+    return { subtotal, taxAmount, total, subtotalUYU, taxAmountUYU, totalUYU };
   };
 
   const validateForm = () => {
@@ -187,6 +258,9 @@ export default function PurchaseOrders({ firmId }) {
     if (!formData.supplier_name?.trim()) newErrors.supplier_name = 'Requerido';
     if (!formData.delivery_date?.trim()) newErrors.delivery_date = 'Requerido';
     if (formData.items.length === 0) newErrors.items = 'Agrega al menos un ítem';
+    if (formData.currency === 'USD' && (!formData.exchange_rate || parseFloat(formData.exchange_rate) <= 0)) {
+      newErrors.exchange_rate = 'Tipo de cambio requerido para dólares';
+    }
 
     setErrors(newErrors);
     return Object.keys(newErrors).length === 0;
@@ -202,7 +276,7 @@ export default function PurchaseOrders({ firmId }) {
 
     try {
       setLoading(true);
-      const { subtotal, taxAmount, total } = calculateTotals();
+      const { subtotal, taxAmount, total, subtotalUYU, taxAmountUYU, totalUYU } = calculateTotals();
 
       let orderNumber = editingOrder?.order_number;
 
@@ -217,8 +291,8 @@ export default function PurchaseOrders({ firmId }) {
         setGeneratedOrderNumber(result);
       }
 
-      // Remover 'items' del formData ya que se guardan por separado
-      const { items, ...orderDataWithoutItems } = formData;
+      // Remover 'items' y 'exchange_rate' del formData ya que se guardan por separado o no existen en BD
+      const { items, exchange_rate, ...orderDataWithoutItems } = formData;
 
       const orderData = {
         ...orderDataWithoutItems,
@@ -278,10 +352,26 @@ export default function PurchaseOrders({ firmId }) {
         orderId = data.id;
       }
 
-      const itemsData = formData.items.map(item => ({
-        purchase_order_id: orderId,
-        ...item
-      }));
+      // Preparar items para guardar, excluyendo campos que no existen en la BD
+      const itemsData = formData.items.map(item => {
+        const itemData = {
+          purchase_order_id: orderId,
+          item_description: item.item_description,
+          quantity: item.quantity,
+          unit: item.unit,
+          unit_price: item.unit_price,
+          tax_rate: item.tax_rate,
+          subtotal: item.subtotal,
+          tax_amount: item.tax_amount,
+          total: item.total
+        };
+        
+        // Los campos subtotal_uyu, tax_amount_uyu, total_uyu y exchange_rate
+        // no existen en la BD, así que no los incluimos
+        // Se pueden calcular después usando el tipo de cambio si es necesario
+        
+        return itemData;
+      });
 
       const { error: itemsError } = await supabase
         .from('purchase_order_items')
@@ -326,20 +416,49 @@ export default function PurchaseOrders({ firmId }) {
         toast.success(editingOrder ? 'Orden actualizada' : 'Orden creada');
       }
 
+      // Preparar metadata completo con todos los detalles de la orden
+      // Reutilizar las variables subtotal, taxAmount, total ya calculadas arriba
+      const metadata = {
+        order_number: orderNumber,
+        order_date: formData.order_date,
+        supplier_name: formData.supplier_name,
+        supplier_rut: formData.supplier_rut || null,
+        supplier_email: formData.supplier_email || null,
+        supplier_phone: formData.supplier_phone || null,
+        supplier_address: formData.supplier_address || null,
+        status: formData.status,
+        currency: formData.currency,
+        exchange_rate: formData.exchange_rate || null,
+        delivery_date: formData.delivery_date || null,
+        delivery_address: formData.delivery_address || null,
+        payment_terms: formData.payment_terms || null,
+        notes: formData.notes || null,
+        items_count: formData.items.length,
+        items: formData.items.map(item => ({
+          description: item.item_description,
+          quantity: item.quantity,
+          unit: item.unit,
+          unit_price: item.unit_price,
+          tax_rate: item.tax_rate,
+          subtotal: item.subtotal,
+          tax_amount: item.tax_amount,
+          total: item.total
+        })),
+        subtotal: subtotal,
+        tax_amount: taxAmount,
+        total_amount: total
+      };
+
       await crearRegistro({
         firmId: firmId,
         premiseId: null,
         lotId: null,
         tipo: 'orden_compra',
-        descripcion: `${editingOrder ? 'Actualización' : 'Creación'} de orden: ${formData.order_number}`,
+        descripcion: `${editingOrder ? 'Actualización' : 'Creación'} de orden: ${orderNumber}`,
         moduloOrigen: 'purchase_orders',
         usuario: user?.full_name || 'sistema',
-        metadata: {
-          order_number: formData.order_number,
-          supplier_name: formData.supplier_name,
-          items_count: formData.items.length,
-          total_amount: calculateTotals().total
-        }
+        referencia: orderId,
+        metadata: metadata
       }).catch(err => console.warn('Error en auditoría:', err));
 
       setShowModal(false);
@@ -369,8 +488,12 @@ export default function PurchaseOrders({ firmId }) {
     const { purchase_order_items, ...orderWithoutRelations } = order;
 
     setEditingOrder(order);
+    
+    // El exchange_rate no se guarda en la BD, así que lo inicializamos vacío
+    // El usuario deberá ingresarlo nuevamente si la moneda es USD
     setFormData({
       ...orderWithoutRelations,
+      exchange_rate: '', // No se guarda en BD, se debe ingresar nuevamente
       items: order.purchase_order_items || []
     });
     setShowModal(true);
@@ -397,12 +520,13 @@ export default function PurchaseOrders({ firmId }) {
       }
 
       // 3. Contar expenses que serán eliminadas en cascade
+      // Las facturas ya no pueden estar en DRAFT, pero mantenemos el filtro por compatibilidad
       const { count: expenseCount, error: countError } = await supabase
         .from('expenses')
         .select('id', { count: 'exact', head: true })
         .eq('purchase_order_id', id)
         .eq('is_auto_generated', true)
-        .eq('status', 'DRAFT');
+        .in('status', ['DRAFT', 'APPROVED']); // Incluir ambos por compatibilidad
 
       if (countError) throw countError;
 
@@ -694,6 +818,7 @@ export default function PurchaseOrders({ firmId }) {
       supplier_address: '',
       status: 'draft',
       currency: 'UYU',
+      exchange_rate: '',
       delivery_date: '',
       delivery_address: '',
       payment_terms: '',
@@ -731,6 +856,95 @@ export default function PurchaseOrders({ firmId }) {
   };
 
   /**
+   * Generar PDF y descargarlo
+   */
+  const handleGeneratePDF = async (order) => {
+    try {
+      setLoading(true);
+      toast.loading('Generando PDF...', { id: 'pdf-generate' });
+
+      // Obtener datos completos de la orden con items
+      const { data: fullOrder, error: orderError } = await supabase
+        .from('purchase_orders')
+        .select(`
+          *,
+          purchase_order_items (*)
+        `)
+        .eq('id', order.id)
+        .single();
+
+      if (orderError) throw orderError;
+
+      // Obtener datos de la firma
+      const { data: firm, error: firmError } = await supabase
+        .from('firms')
+        .select('name, location, rut')
+        .eq('id', firmId)
+        .single();
+
+      if (firmError) {
+        console.warn('No se pudo cargar datos de la firma:', firmError);
+      }
+
+      // Generar PDF
+      const pdfBlob = generatePurchaseOrderPDF(fullOrder, firm || {});
+
+      // Crear URL del blob y descargar
+      const url = URL.createObjectURL(pdfBlob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `Orden_Compra_${order.order_number}.pdf`;
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      URL.revokeObjectURL(url);
+
+      toast.success('PDF generado y descargado', { id: 'pdf-generate' });
+
+      // Registrar en auditoría
+      await crearRegistro({
+        firmId: firmId,
+        premiseId: null,
+        lotId: null,
+        tipo: 'purchase_order_pdf_generated',
+        descripcion: `PDF de orden ${order.order_number} generado y descargado`,
+        moduloOrigen: 'purchase_orders',
+        usuario: user?.full_name || 'sistema',
+        metadata: {
+          purchase_order_id: order.id,
+          order_number: order.order_number
+        }
+      }).catch(err => console.warn('Error en auditoría:', err));
+    } catch (error) {
+      console.error('Error generando PDF:', error);
+      toast.error(`Error: ${error.message || 'No se pudo generar el PDF'}`, { id: 'pdf-generate' });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  /**
+   * Abrir cliente de email con información prellenada
+   */
+  const handleOpenEmail = (order) => {
+    if (!order.supplier_email) {
+      toast.error('La orden no tiene email del proveedor');
+      return;
+    }
+
+    const subject = encodeURIComponent(`Orden de Compra ${order.order_number}`);
+    const body = encodeURIComponent(
+      `Estimado/a ${order.supplier_name},\n\n` +
+      `Adjunto encontrará la Orden de Compra Nº ${order.order_number}.\n\n` +
+      `Por favor, confirme la recepción y disponibilidad de los productos solicitados.\n\n` +
+      `Saludos cordiales.`
+    );
+
+    const mailtoLink = `mailto:${order.supplier_email}?subject=${subject}&body=${body}`;
+    window.location.href = mailtoLink;
+  };
+
+  /**
    * Retorna botones de acción dinámicos según el estado actual
    */
   const getActionButtons = (order) => {
@@ -763,6 +977,28 @@ export default function PurchaseOrders({ firmId }) {
       });
     }
 
+    // Botón Generar PDF (disponible si no está cancelada)
+    if (order.status !== 'cancelled') {
+      actions.push({
+        type: 'generate-pdf',
+        label: 'Generar PDF',
+        color: 'bg-indigo-600 hover:bg-indigo-700',
+        icon: Download,
+        onClick: () => handleGeneratePDF(order)
+      });
+
+      // Botón Abrir Email (disponible si tiene email y no está cancelada)
+      if (order.supplier_email) {
+        actions.push({
+          type: 'open-email',
+          label: 'Abrir Email',
+          color: 'bg-teal-600 hover:bg-teal-700',
+          icon: Mail,
+          onClick: () => handleOpenEmail(order)
+        });
+      }
+    }
+
     // Botón Editar (siempre disponible excepto en cancelado)
     if (order.status !== 'cancelled') {
       actions.push({
@@ -791,7 +1027,7 @@ export default function PurchaseOrders({ firmId }) {
     order.supplier_name?.toLowerCase().includes(searchTerm.toLowerCase())
   );
 
-  const { subtotal, taxAmount, total } = calculateTotals();
+  const { subtotal, taxAmount, total, subtotalUYU, taxAmountUYU, totalUYU } = calculateTotals();
 
   return (
     <div className="w-full min-h-screen bg-slate-50">
@@ -1079,13 +1315,16 @@ export default function PurchaseOrders({ firmId }) {
                         </select>
                       </div>
                       <div>
-                        <label className="block text-xs font-medium text-slate-700 mb-1">Precio</label>
+                        <label className="block text-xs font-medium text-slate-700 mb-1">
+                          Precio {formData.currency === 'USD' ? '(USD)' : '(UYU)'}
+                        </label>
                         <input
                           type="number"
                           step="0.01"
                           className="w-full px-2 py-2 border border-slate-300 rounded text-sm focus:ring-2 focus:ring-blue-500 outline-none"
                           value={currentItem.unit_price}
                           onChange={e => setCurrentItem({...currentItem, unit_price: e.target.value})}
+                          placeholder={formData.currency === 'USD' ? 'US$' : '$'}
                         />
                       </div>
                       <div>
@@ -1130,16 +1369,52 @@ export default function PurchaseOrders({ firmId }) {
                             </button>
                           </div>
                           <div className="flex gap-4 justify-end text-xs pt-2 border-t border-slate-100">
-                            <div>Sub: ${item.subtotal}</div>
-                            <div>IVA: ${item.tax_amount}</div>
-                            <div className="font-bold text-blue-600">Total: ${item.total}</div>
+                            <div>
+                              Sub: {formData.currency === 'USD' ? `US$${item.subtotal}` : `$${item.subtotal}`}
+                              {formData.currency === 'USD' && item.subtotal_uyu && (
+                                <span className="text-slate-500 ml-1">(${item.subtotal_uyu})</span>
+                              )}
+                            </div>
+                            <div>
+                              IVA: {formData.currency === 'USD' ? `US$${item.tax_amount}` : `$${item.tax_amount}`}
+                              {formData.currency === 'USD' && item.tax_amount_uyu && (
+                                <span className="text-slate-500 ml-1">(${item.tax_amount_uyu})</span>
+                              )}
+                            </div>
+                            <div className="font-bold text-blue-600">
+                              Total: {formData.currency === 'USD' ? `US$${item.total}` : `$${item.total}`}
+                              {formData.currency === 'USD' && item.total_uyu && (
+                                <span className="text-slate-500 ml-1">(${item.total_uyu})</span>
+                              )}
+                            </div>
                           </div>
                         </div>
                       ))}
                       <div className="bg-blue-100 p-3 rounded font-semibold text-right text-sm">
-                        <div>Subtotal: ${subtotal.toFixed(2)}</div>
-                        <div>IVA: ${taxAmount.toFixed(2)}</div>
-                        <div className="text-blue-700">TOTAL: ${total.toFixed(2)}</div>
+                        <div>
+                          Subtotal: {formData.currency === 'USD' ? `US$${subtotal.toFixed(2)}` : `$${subtotal.toFixed(2)}`}
+                          {formData.currency === 'USD' && formData.exchange_rate && (
+                            <span className="text-slate-600 ml-2 font-normal">
+                              (${subtotalUYU.toFixed(2)} UYU)
+                            </span>
+                          )}
+                        </div>
+                        <div>
+                          IVA: {formData.currency === 'USD' ? `US$${taxAmount.toFixed(2)}` : `$${taxAmount.toFixed(2)}`}
+                          {formData.currency === 'USD' && formData.exchange_rate && (
+                            <span className="text-slate-600 ml-2 font-normal">
+                              (${taxAmountUYU.toFixed(2)} UYU)
+                            </span>
+                          )}
+                        </div>
+                        <div className="text-blue-700">
+                          TOTAL: {formData.currency === 'USD' ? `US$${total.toFixed(2)}` : `$${total.toFixed(2)}`}
+                          {formData.currency === 'USD' && formData.exchange_rate && (
+                            <span className="text-slate-600 ml-2 font-normal">
+                              (${totalUYU.toFixed(2)} UYU)
+                            </span>
+                          )}
+                        </div>
                       </div>
                     </div>
                   )}
@@ -1173,12 +1448,49 @@ export default function PurchaseOrders({ firmId }) {
                       <select
                         className="w-full px-3 py-2 border border-slate-300 rounded-lg focus:ring-2 focus:ring-blue-500 outline-none bg-white text-sm"
                         value={formData.currency}
-                        onChange={e => setFormData({...formData, currency: e.target.value})}
+                        onChange={e => {
+                          const newCurrency = e.target.value;
+                          setFormData({
+                            ...formData, 
+                            currency: newCurrency,
+                            // Limpiar tipo de cambio si se cambia a pesos
+                            exchange_rate: newCurrency === 'UYU' ? '' : formData.exchange_rate
+                          });
+                        }}
                       >
-                        <option value="UYU">Pesos ($)</option>
-                        <option value="USD">Dólares (US$)</option>
+                        <option value="UYU">Pesos (UYU)</option>
+                        <option value="USD">Dólares (USD)</option>
                       </select>
                     </div>
+                    {formData.currency === 'USD' && (
+                      <div>
+                        <label className="block text-sm font-medium text-slate-700 mb-1">
+                          Tipo de Cambio (USD → UYU) *
+                        </label>
+                        <input
+                          type="number"
+                          step="0.01"
+                          min="0.01"
+                          required={formData.currency === 'USD'}
+                          className={`w-full px-3 py-2 border rounded-lg focus:ring-2 focus:ring-blue-500 outline-none text-sm transition-colors ${
+                            errors.exchange_rate ? 'border-red-500 ring-2 ring-red-200' : 'border-slate-300'
+                          }`}
+                          value={formData.exchange_rate}
+                          onChange={e => {
+                            setFormData({...formData, exchange_rate: e.target.value});
+                            // Limpiar error al escribir
+                            if (errors.exchange_rate) {
+                              setErrors({...errors, exchange_rate: null});
+                            }
+                          }}
+                          placeholder="Ej: 40.50"
+                        />
+                        {errors.exchange_rate && (
+                          <p className="text-red-600 text-xs mt-1">{errors.exchange_rate}</p>
+                        )}
+                        <p className="text-xs text-slate-500 mt-1">Ingresa a cuántos pesos equivale 1 dólar</p>
+                      </div>
+                    )}
                     <div className="sm:col-span-2">
                       <label className="block text-sm font-medium text-slate-700 mb-1">Dirección de Entrega</label>
                       <input
