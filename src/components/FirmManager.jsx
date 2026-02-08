@@ -3,7 +3,7 @@ import { toast } from 'sonner';
 import { supabase } from '../lib/supabase';
 import { Building2, Plus, MapPin, Check, Loader, Edit2, Trash2, AlertTriangle } from 'lucide-react';
 import { crearRegistro } from '../services/registros';
-import { deleteFirmWithCleanup } from '../services/firmDeletion';
+import { deleteFirmWithCleanup, checkFirmDependencies } from '../services/firmDeletion';
 import { useAuth } from '../contexts/AuthContext';
 import { usePermissions } from './guards/PermissionGuard';
 import { STRUCTURE_PERMISSIONS } from '../lib/permissions';
@@ -27,6 +27,8 @@ export default function FirmManager({ onSelectFirm, selectedFirmId }) {
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [formErrors, setFormErrors] = useState({});
+  const [deleteBlockers, setDeleteBlockers] = useState([]);
+  const [forceDelete, setForceDelete] = useState(false);
 
   // FIX #6: Validar formato RUT
   function validarRUT(rut) {
@@ -235,30 +237,41 @@ export default function FirmManager({ onSelectFirm, selectedFirmId }) {
 
       // FIX #10: Usar enfoque arquitectónico para eliminación de firma
       // Esto investiga todas las dependencias, limpia las auto-creadas,
-      // y solo elimina si no hay datos user-created
+      // y solo elimina si no hay datos user-created (o si se fuerza la eliminación)
       const result = await deleteFirmWithCleanup({
         firmId: editingId,
         firmName: formData.name,
-        userId: user?.id || 'sistema'
+        userId: user?.id || 'sistema',
+        forceDelete: forceDelete
       });
 
       if (!result.success) {
-        // Error o bloqueador encontrado
-        if (result.blockers && result.blockers.length > 0) {
-          // Datos user-created bloqueando eliminación
-          const blockersText = result.blockers.map(b => b.description).join(', ');
-          toast.error(`No se puede eliminar: contiene ${blockersText}`);
-        } else {
-          // Otro error
+        // Error al eliminar
           toast.error(result.message || 'Error al eliminar la firma');
-        }
         setShowDeleteConfirm(false);
         setIsSubmitting(false);
         return;
       }
 
       // Éxito
-      toast.success(result.message);
+      let successMessage = result.message;
+      if (result.cascadeDeleted && Object.keys(result.cascadeDeleted).length > 0) {
+        const deletedItems = Object.entries(result.cascadeDeleted)
+          .filter(([_, count]) => count > 0)
+          .map(([key, count]) => {
+            const labels = {
+              lots: 'lotes',
+              premises: 'predios',
+              expenses: 'gastos',
+              income: 'ingresos',
+              works: 'trabajos'
+            };
+            return `${count} ${labels[key] || key}`;
+          });
+        successMessage = `Firma eliminada. También se eliminaron: ${deletedItems.join(', ')}`;
+      }
+      
+      toast.success(successMessage);
 
       setFirms(firms.filter(f => f.id !== editingId));
 
@@ -278,6 +291,8 @@ export default function FirmManager({ onSelectFirm, selectedFirmId }) {
         business_units: []
       });
       setEditingId(null);
+      setDeleteBlockers([]);
+      setForceDelete(false);
     } catch (error) {
       console.error('Error deleting firm:', error);
       toast.error('Error inesperado al eliminar la firma');
@@ -349,28 +364,76 @@ export default function FirmManager({ onSelectFirm, selectedFirmId }) {
         <div className="mb-8 bg-white p-6 rounded-xl shadow-sm border border-slate-200 relative">
           {showDeleteConfirm && (
             <div className="absolute inset-0 bg-white/90 z-10 flex items-center justify-center rounded-xl p-6">
-              <div className="bg-white border border-red-200 shadow-lg rounded-xl p-6 max-w-md w-full text-center">
+              <div className="bg-white border border-red-200 shadow-lg rounded-xl p-6 max-w-lg w-full">
                 <div className="w-12 h-12 bg-red-100 text-red-600 rounded-full flex items-center justify-center mx-auto mb-4">
                   <AlertTriangle size={24} />
                 </div>
-                <h3 className="text-lg font-bold text-slate-900 mb-2">¿Estás seguro de eliminar esta firma?</h3>
-                <p className="text-slate-600 mb-6">
+                <h3 className="text-lg font-bold text-slate-900 mb-2 text-center">
+                  ¿Estás seguro de eliminar esta firma?
+                </h3>
+                
+                {deleteBlockers.length > 0 ? (
+                  <>
+                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">
+                      <p className="text-sm font-semibold text-amber-900 mb-2">
+                        ⚠️ Esta firma contiene datos que deben eliminarse primero:
+                      </p>
+                      <ul className="text-sm text-amber-800 space-y-1 text-left">
+                        {deleteBlockers.map((blocker, idx) => (
+                          <li key={idx} className="flex items-center gap-2">
+                            <span className="w-2 h-2 bg-amber-600 rounded-full"></span>
+                            {blocker.description} ({blocker.count})
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                    <div className="mb-4">
+                      <label className="flex items-start gap-3 cursor-pointer">
+                        <input
+                          type="checkbox"
+                          checked={forceDelete}
+                          onChange={(e) => setForceDelete(e.target.checked)}
+                          className="mt-1 w-4 h-4 text-red-600 border-slate-300 rounded focus:ring-red-500"
+                        />
+                        <span className="text-sm text-slate-700">
+                          <span className="font-semibold text-red-600">Eliminar todo en cascada:</span> 
+                          {' '}Eliminar la firma junto con todos los datos relacionados listados arriba. 
+                          <span className="block mt-1 text-red-600 font-semibold">
+                            Esta acción es irreversible.
+                          </span>
+                        </span>
+                      </label>
+                    </div>
+                  </>
+                ) : (
+                  <p className="text-slate-600 mb-6 text-center">
                   Esta acción eliminará la firma y todos sus datos asociados. <br/>
                   <span className="font-semibold text-red-600">Esta acción no tiene vuelta atrás.</span>
                 </p>
+                )}
+                
                 <div className="flex gap-3 justify-center">
                   <button
-                    onClick={() => setShowDeleteConfirm(false)}
-                    className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg font-medium"
+                    onClick={() => {
+                      setShowDeleteConfirm(false);
+                      setForceDelete(false);
+                      setDeleteBlockers([]);
+                    }}
+                    disabled={isSubmitting}
+                    className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg font-medium disabled:opacity-50"
                   >
                     Cancelar
                   </button>
                   <button
                     onClick={handleDelete}
-                    disabled={isSubmitting}
-                    className="px-4 py-2 bg-red-600 text-white rounded-lg hover:bg-red-700 font-medium"
+                    disabled={isSubmitting || (deleteBlockers.length > 0 && !forceDelete)}
+                    className={`px-4 py-2 rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed ${
+                      deleteBlockers.length > 0 && !forceDelete
+                        ? 'bg-slate-300 text-slate-500'
+                        : 'bg-red-600 text-white hover:bg-red-700'
+                    }`}
                   >
-                    {isSubmitting ? 'Eliminando...' : 'Sí, Eliminar'}
+                    {isSubmitting ? 'Eliminando...' : (deleteBlockers.length > 0 ? 'Eliminar Todo' : 'Sí, Eliminar')}
                   </button>
                 </div>
               </div>
@@ -382,7 +445,27 @@ export default function FirmManager({ onSelectFirm, selectedFirmId }) {
             {editingId && (
               <button
                 type="button"
-                onClick={() => setShowDeleteConfirm(true)}
+                onClick={async () => {
+                  // Verificar dependencias antes de mostrar el modal
+                  try {
+                    const deps = await checkFirmDependencies(editingId);
+                    const blockers = Object.entries(deps)
+                      .filter(([key, dep]) => !dep.canDelete && dep.count > 0)
+                      .map(([key, dep]) => ({
+                        table: key,
+                        count: dep.count,
+                        description: dep.description
+                      }));
+                    
+                    setDeleteBlockers(blockers);
+                    setForceDelete(false);
+                    setShowDeleteConfirm(true);
+                  } catch (error) {
+                    console.error('Error verificando dependencias:', error);
+                    setDeleteBlockers([]);
+                    setShowDeleteConfirm(true);
+                  }
+                }}
                 disabled={!canDelete}
                 title={!canDelete ? 'No tienes permiso para eliminar firmas' : 'Eliminar esta firma'}
                 className={`flex items-center gap-2 text-sm font-medium p-2 rounded-lg transition-colors ${

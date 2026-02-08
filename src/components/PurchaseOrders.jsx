@@ -25,8 +25,7 @@ import {
   Package,
   ChevronDown,
   AlertCircle,
-  Download,
-  Mail
+  Download
 } from 'lucide-react';
 import { useAuth } from '../contexts/AuthContext';
 import { toast } from 'sonner';
@@ -355,7 +354,7 @@ export default function PurchaseOrders({ firmId }) {
       // Preparar items para guardar, excluyendo campos que no existen en la BD
       const itemsData = formData.items.map(item => {
         const itemData = {
-          purchase_order_id: orderId,
+        purchase_order_id: orderId,
           item_description: item.item_description,
           quantity: item.quantity,
           unit: item.unit,
@@ -924,27 +923,6 @@ export default function PurchaseOrders({ firmId }) {
   };
 
   /**
-   * Abrir cliente de email con información prellenada
-   */
-  const handleOpenEmail = (order) => {
-    if (!order.supplier_email) {
-      toast.error('La orden no tiene email del proveedor');
-      return;
-    }
-
-    const subject = encodeURIComponent(`Orden de Compra ${order.order_number}`);
-    const body = encodeURIComponent(
-      `Estimado/a ${order.supplier_name},\n\n` +
-      `Adjunto encontrará la Orden de Compra Nº ${order.order_number}.\n\n` +
-      `Por favor, confirme la recepción y disponibilidad de los productos solicitados.\n\n` +
-      `Saludos cordiales.`
-    );
-
-    const mailtoLink = `mailto:${order.supplier_email}?subject=${subject}&body=${body}`;
-    window.location.href = mailtoLink;
-  };
-
-  /**
    * Retorna botones de acción dinámicos según el estado actual
    */
   const getActionButtons = (order) => {
@@ -986,17 +964,6 @@ export default function PurchaseOrders({ firmId }) {
         icon: Download,
         onClick: () => handleGeneratePDF(order)
       });
-
-      // Botón Abrir Email (disponible si tiene email y no está cancelada)
-      if (order.supplier_email) {
-        actions.push({
-          type: 'open-email',
-          label: 'Abrir Email',
-          color: 'bg-teal-600 hover:bg-teal-700',
-          icon: Mail,
-          onClick: () => handleOpenEmail(order)
-        });
-      }
     }
 
     // Botón Editar (siempre disponible excepto en cancelado)
@@ -1398,7 +1365,7 @@ export default function PurchaseOrders({ firmId }) {
                               (${subtotalUYU.toFixed(2)} UYU)
                             </span>
                           )}
-                        </div>
+                      </div>
                         <div>
                           IVA: {formData.currency === 'USD' ? `US$${taxAmount.toFixed(2)}` : `$${taxAmount.toFixed(2)}`}
                           {formData.currency === 'USD' && formData.exchange_rate && (

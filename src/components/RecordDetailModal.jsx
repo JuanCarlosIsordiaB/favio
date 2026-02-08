@@ -330,75 +330,196 @@ export default function RecordDetailModal({ record, onClose }) {
       return renderExpenseDetails(metadata);
     }
 
-    // Para otros tipos, mostrar metadata genérico
+    // Determinar si es una creación
+    const isCreation = originalData.tipo && (
+      originalData.tipo.includes('creada') || 
+      originalData.tipo.includes('creado')
+    );
+
+    // Para otros tipos, mostrar metadata genérico con mejor formato
     return (
-      <div className="space-y-3">
-        {Object.entries(metadata).map(([key, value]) => {
-          if (value === null || value === undefined || value === '') return null;
-          if (key === 'items' && Array.isArray(value)) {
-            return (
-              <div key={key} className="mb-3">
-                <p className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-2">
-                  Productos ({value.length})
-                </p>
-                <div className="space-y-2 max-h-48 overflow-y-auto">
-                  {value.map((item, index) => (
-                    <div key={index} className="bg-slate-50 rounded p-2 text-sm">
-                      {typeof item === 'object' ? (
-                        <div>
-                          {(item.description || item.concept) && <p className="font-medium">{item.description || item.concept}</p>}
-                          {item.quantity && <p className="text-xs text-slate-600">{item.quantity} {item.unit || ''}</p>}
-                          {item.unit_price && <p className="text-xs text-slate-600">Precio: ${parseFloat(item.unit_price).toFixed(2)}</p>}
+      <div className="space-y-4">
+        {isCreation && (
+          <div className="bg-green-50 border border-green-200 rounded-lg p-4 mb-4">
+            <h4 className="text-sm font-semibold text-green-900 mb-3 flex items-center gap-2">
+              <Package size={16} />
+              Lo que se creó
+            </h4>
+            <p className="text-sm text-green-800">{originalData.descripcion}</p>
+          </div>
+        )}
+
+        <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
+          <h4 className="text-sm font-semibold text-slate-900 mb-3 flex items-center gap-2">
+            <FileText size={16} />
+            Detalles
+          </h4>
+          <div className="space-y-3">
+            {Object.entries(metadata).map(([key, value]) => {
+              if (value === null || value === undefined || value === '') return null;
+              
+              // Manejar arrays de items
+              if (key === 'items' && Array.isArray(value)) {
+                return (
+                  <div key={key} className="mb-3">
+                    <p className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-2">
+                      Productos ({value.length})
+                    </p>
+                    <div className="space-y-2 max-h-48 overflow-y-auto">
+                      {value.map((item, index) => (
+                        <div key={index} className="bg-white rounded p-3 border border-slate-200 text-sm">
+                          {typeof item === 'object' ? (
+                            <div>
+                              {(item.description || item.concept || item.name) && (
+                                <p className="font-medium text-slate-900">{item.description || item.concept || item.name}</p>
+                              )}
+                              {item.quantity && (
+                                <p className="text-xs text-slate-600 mt-1">
+                                  Cantidad: {item.quantity} {item.unit || ''}
+                                </p>
+                              )}
+                              {item.unit_price && (
+                                <p className="text-xs text-slate-600">
+                                  Precio: {metadata.currency === 'USD' ? 'US$' : '$'}{parseFloat(item.unit_price).toFixed(2)}
+                                </p>
+                              )}
+                              {item.total && (
+                                <p className="text-xs font-semibold text-slate-900 mt-1">
+                                  Total: {metadata.currency === 'USD' ? 'US$' : '$'}{parseFloat(item.total).toFixed(2)}
+                                </p>
+                              )}
+                            </div>
+                          ) : (
+                            <p>{String(item)}</p>
+                          )}
                         </div>
-                      ) : (
-                        <p>{String(item)}</p>
-                      )}
+                      ))}
                     </div>
-                  ))}
+                  </div>
+                );
+              }
+
+              // Manejar arrays simples
+              if (Array.isArray(value)) {
+                return (
+                  <div key={key} className="mb-3">
+                    <p className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-1">
+                      {getFieldLabel(key)} ({value.length})
+                    </p>
+                    <div className="bg-white rounded p-2 border border-slate-200">
+                      <ul className="text-sm text-slate-800 space-y-1">
+                        {value.map((item, index) => (
+                          <li key={index} className="flex items-center gap-2">
+                            <span className="w-1.5 h-1.5 bg-slate-400 rounded-full"></span>
+                            {typeof item === 'object' ? JSON.stringify(item, null, 2) : String(item)}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  </div>
+                );
+              }
+
+              // Traducir nombres de campos comunes al español
+              const label = getFieldLabel(key);
+              const formattedValue = formatFieldValue(key, value, metadata);
+
+              return (
+                <div key={key} className="mb-3">
+                  <p className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-1">
+                    {label}
+                  </p>
+                  <p className="text-slate-800 font-medium text-sm">
+                    {formattedValue}
+                  </p>
                 </div>
-              </div>
-            );
-          }
-          // Traducir nombres de campos comunes al español
-          const fieldLabels = {
-            'amount': 'Monto',
-            'provider': 'Proveedor',
-            'invoice_full': 'Factura Completa',
-            'invoice_series': 'Serie',
-            'invoice_number': 'Número',
-            'invoice_date': 'Fecha',
-            'provider_name': 'Proveedor',
-            'provider_rut': 'RUT',
-            'provider_email': 'Email',
-            'provider_phone': 'Teléfono',
-            'provider_address': 'Dirección',
-            'category': 'Categoría',
-            'concept': 'Concepto',
-            'currency': 'Moneda',
-            'status': 'Estado',
-            'payment_terms': 'Condiciones de Pago',
-            'due_date': 'Fecha Vencimiento',
-            'notes': 'Notas',
-            'subtotal': 'Subtotal',
-            'iva_amount': 'IVA',
-            'tax_amount': 'IVA',
-            'total_amount': 'Total',
-            'items_count': 'Cantidad de Productos'
-          };
-          const label = fieldLabels[key] || key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
-          return (
-            <div key={key} className="mb-3">
-              <p className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-1">
-                {label}
-              </p>
-              <p className="text-slate-800 font-medium">
-                {typeof value === 'object' ? JSON.stringify(value, null, 2) : String(value)}
-              </p>
-            </div>
-          );
-        })}
+              );
+            })}
+          </div>
+        </div>
       </div>
     );
+  };
+
+  const getFieldLabel = (key) => {
+    const fieldLabels = {
+      'amount': 'Monto',
+      'provider': 'Proveedor',
+      'invoice_full': 'Factura Completa',
+      'invoice_series': 'Serie',
+      'invoice_number': 'Número',
+      'invoice_date': 'Fecha Factura',
+      'provider_name': 'Proveedor',
+      'provider_rut': 'RUT',
+      'provider_email': 'Email',
+      'provider_phone': 'Teléfono',
+      'provider_address': 'Dirección',
+      'category': 'Categoría',
+      'concept': 'Concepto',
+      'currency': 'Moneda',
+      'status': 'Estado',
+      'payment_terms': 'Condiciones de Pago',
+      'due_date': 'Fecha Vencimiento',
+      'notes': 'Notas',
+      'subtotal': 'Subtotal',
+      'iva_amount': 'IVA',
+      'tax_amount': 'IVA',
+      'total_amount': 'Total',
+      'items_count': 'Cantidad de Productos',
+      'order_number': 'Número de Orden',
+      'beneficiary_name': 'Beneficiario',
+      'beneficiary_rut': 'RUT Beneficiario',
+      'beneficiary_bank': 'Banco',
+      'beneficiary_account': 'Cuenta',
+      'payment_method': 'Método de Pago',
+      'facturas_count': 'Cantidad de Facturas',
+      'facturas': 'Facturas',
+      'facturas_actualizadas': 'Facturas Actualizadas',
+      'factura_ids': 'IDs de Facturas',
+      'name': 'Nombre',
+      'description': 'Descripción',
+      'date': 'Fecha',
+      'quantity': 'Cantidad',
+      'unit': 'Unidad',
+      'price': 'Precio',
+      'total': 'Total',
+      'created_at': 'Fecha de Creación',
+      'updated_at': 'Fecha de Actualización'
+    };
+    return fieldLabels[key] || key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+  };
+
+  const formatFieldValue = (key, value, metadata) => {
+    // Formatear montos
+    if ((key.includes('amount') || key.includes('total') || key.includes('price') || key === 'subtotal' || key === 'iva_amount' || key === 'tax_amount') && typeof value === 'number') {
+      const currency = metadata.currency || 'UYU';
+      return `${currency === 'USD' ? 'US$' : '$'}${value.toFixed(2)}`;
+    }
+
+    // Formatear fechas
+    if ((key.includes('date') || key.includes('fecha') || key.includes('created_at') || key.includes('updated_at')) && typeof value === 'string') {
+      try {
+        return formatDate(value);
+      } catch {
+        return String(value);
+      }
+    }
+
+    // Formatear objetos
+    if (typeof value === 'object' && !Array.isArray(value)) {
+      return (
+        <pre className="text-xs bg-slate-100 p-2 rounded overflow-auto max-h-40">
+          {JSON.stringify(value, null, 2)}
+        </pre>
+      );
+    }
+
+    // Formatear booleanos
+    if (typeof value === 'boolean') {
+      return value ? 'Sí' : 'No';
+    }
+
+    return String(value);
   };
 
   return (

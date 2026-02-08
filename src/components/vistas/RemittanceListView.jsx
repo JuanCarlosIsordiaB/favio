@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Button } from '../ui/button';
 import { Input } from '../ui/input';
 import { Badge } from '../ui/badge';
@@ -7,6 +7,7 @@ import { Card } from '../ui/card';
 import { Eye, Trash2, Search, Calendar } from 'lucide-react';
 import RemittanceDetailModal from '../modales/RemittanceDetailModal';
 import RemittanceReceiveModal from '../modales/RemittanceReceiveModal';
+import InputFormModal from '../modales/InputFormModal';
 import { supabase } from '../../lib/supabase';
 import { toast } from 'sonner';
 
@@ -23,6 +24,32 @@ export default function RemittanceListView({
   const [selectedRemittance, setSelectedRemittance] = useState(null);
   const [isDetailModalOpen, setIsDetailModalOpen] = useState(false);
   const [isReceiveModalOpen, setIsReceiveModalOpen] = useState(false);
+  const [itemsNeedingInputCreation, setItemsNeedingInputCreation] = useState([]);
+  const [currentItemCreating, setCurrentItemCreating] = useState(null);
+  const [isInputFormModalOpen, setIsInputFormModalOpen] = useState(false);
+  const [depots, setDepots] = useState([]);
+
+  // Cargar depósitos
+  useEffect(() => {
+    if (selectedFirm?.id) {
+      loadDepots();
+    }
+  }, [selectedFirm?.id]);
+
+  const loadDepots = async () => {
+    try {
+      // Cargar todos los depósitos de la firma, no solo del predio seleccionado
+      const { data } = await supabase
+        .from('lots')
+        .select('id, name')
+        .eq('firm_id', selectedFirm.id)
+        .eq('is_depot', true)
+        .order('name');
+      setDepots(data || []);
+    } catch (err) {
+      console.warn('Error cargando depósitos:', err);
+    }
+  };
 
   const getStatusBadge = (status) => {
     const styles = {
@@ -55,16 +82,78 @@ export default function RemittanceListView({
 
   const handleSubmitReceive = async (remittanceId, itemsData) => {
     try {
-      // Usar servicio directamente para recibir remito con cantidades parciales
-      const { recibirRemitoParciamente } = await import('../../services/remittances');
-      await recibirRemitoParciamente(remittanceId, currentUser, itemsData);
+      const { recibirRemitoParciamente, vincularInputAlItem } = await import('../../services/remittances');
+      const { crearInsumo } = await import('../../services/inputs');
 
-      toast.success('Remito recibido correctamente');
+      // Actualizar ítems y marcar remito como parcialmente recibido
+      const result = await recibirRemitoParciamente(remittanceId, currentUser, itemsData);
+
+      // CRÍTICO: Cerrar el modal de recepción primero
       setIsReceiveModalOpen(false);
-      onRefresh();
+
+      // Verificar si hay items que necesitan crear insumo
+      if (result.itemsNeedingInputCreation && result.itemsNeedingInputCreation.length > 0) {
+        console.log('📝 [handleSubmitReceive] Abriendo InputFormModal con', result.itemsNeedingInputCreation.length, 'items');
+        setItemsNeedingInputCreation(result.itemsNeedingInputCreation);
+        setCurrentItemCreating(result.itemsNeedingInputCreation[0]);
+        toast.info(`Necesitas crear ${result.itemsNeedingInputCreation.length} insumo(s) para este remito`);
+        // Abrir el modal después de un pequeño delay para asegurar que se renderice
+        setTimeout(() => {
+          setIsInputFormModalOpen(true);
+        }, 100);
+      } else {
+        toast.success('✓ Remito recibido\n✓ Stock actualizado');
+        onRefresh();
+      }
     } catch (err) {
       console.error('Error:', err);
-      toast.error('Error procesando recepción');
+      toast.error('Error procesando recepción: ' + (err.message || 'Error desconocido'));
+    }
+  };
+
+  const handleCreateInput = async (formData) => {
+    try {
+      const { crearInsumo } = await import('../../services/inputs');
+      const { vincularInputAlItem } = await import('../../services/remittances');
+
+      // Crear el insumo
+      const nuevoInsumo = await crearInsumo({
+        ...formData,
+        firm_id: selectedFirm.id,
+        premise_id: selectedPremise?.id || null,
+        // Si initial_stock no viene en formData, usar la cantidad recibida
+        current_stock: formData.initial_stock || currentItemCreating.quantity_received
+      });
+
+      // Vincular el insumo al item del remito
+      await vincularInputAlItem(currentItemCreating.id, nuevoInsumo.id);
+
+      toast.success(`✓ Insumo "${currentItemCreating.item_description}" creado`);
+
+      // Verificar si hay más items faltantes
+      const remainingItems = itemsNeedingInputCreation.filter(
+        item => item.id !== currentItemCreating.id
+      );
+
+      if (remainingItems.length > 0) {
+        setItemsNeedingInputCreation(remainingItems);
+        setCurrentItemCreating(remainingItems[0]);
+        // CRÍTICO: Cerrar y reabrir modal para forzar reset del formulario
+        setIsInputFormModalOpen(false);
+        setTimeout(() => {
+          setIsInputFormModalOpen(true);
+        }, 300);
+      } else {
+        // Todos los insumos creados
+        setIsInputFormModalOpen(false);
+        setItemsNeedingInputCreation([]);
+        setCurrentItemCreating(null);
+        toast.success('✓ Todos los insumos creados correctamente\n✓ Stock actualizado');
+        onRefresh();
+      }
+    } catch (err) {
+      console.error('Error creando insumo:', err);
+      toast.error('Error creando insumo: ' + (err.message || 'Error desconocido'));
     }
   };
 
@@ -150,14 +239,15 @@ export default function RemittanceListView({
                         <Eye className="w-4 h-4" />
                       </Button>
 
-                      {remittance.status === 'in_transit' && (
+                      {(remittance.status === 'in_transit' || remittance.status === 'partially_received') && (
                         <Button
                           size="sm"
                           variant="ghost"
                           className="text-green-600 hover:text-green-700"
                           onClick={() => handleReceive(remittance.id)}
+                          title={remittance.status === 'partially_received' ? 'Completar recepción' : 'Recibir remito'}
                         >
-                          Recibir
+                          {remittance.status === 'partially_received' ? 'Completar' : 'Recibir'}
                         </Button>
                       )}
 
@@ -200,6 +290,28 @@ export default function RemittanceListView({
         onClose={() => setIsReceiveModalOpen(false)}
         onSubmit={handleSubmitReceive}
       />
+
+      {/* Modal para crear insumos faltantes */}
+      {currentItemCreating && (
+        <InputFormModal
+          isOpen={isInputFormModalOpen}
+          isEditing={false}
+          onSubmit={handleCreateInput}
+          onCancel={() => {
+            setIsInputFormModalOpen(false);
+            setItemsNeedingInputCreation([]);
+            setCurrentItemCreating(null);
+          }}
+          depots={depots}
+          initialData={{
+            name: currentItemCreating.item_description || '',
+            initial_stock: currentItemCreating.quantity_received || 0,
+            unit: currentItemCreating.unit || '',
+            depot_id: depots.length > 0 ? depots[0].id : '', // Preseleccionar primer depósito si existe
+            category: 'Otros' // Categoría por defecto
+          }}
+        />
+      )}
     </div>
   );
 }

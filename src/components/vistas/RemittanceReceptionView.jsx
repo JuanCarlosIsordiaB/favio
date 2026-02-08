@@ -27,19 +27,21 @@ export default function RemittanceReceptionView({
 
   // Cargar depósitos
   useEffect(() => {
-    if (selectedPremise?.id) {
+    if (selectedFirm?.id) {
       loadDepots();
     }
-  }, [selectedPremise?.id]);
+  }, [selectedFirm?.id]);
 
   const loadDepots = async () => {
     try {
       const { supabase } = await import('../../lib/supabase');
+      // Cargar todos los depósitos de la firma, no solo del predio seleccionado
       const { data } = await supabase
         .from('lots')
         .select('id, name')
-        .eq('premise_id', selectedPremise.id)
-        .eq('is_depot', true);
+        .eq('firm_id', selectedFirm.id)
+        .eq('is_depot', true)
+        .order('name');
       setDepots(data || []);
     } catch (err) {
       console.warn('Error cargando depósitos:', err);

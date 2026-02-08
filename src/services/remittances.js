@@ -477,17 +477,103 @@ export async function recibirRemitoParciamente(remittanceId, receivedBy, items) 
     const finalStatus = isComplete ? 'received' : 'partially_received';
 
     // Actualizar remito con estado determinado
-    const { data, error } = await supabase
-      .from('remittances')
-      .update({
-        status: finalStatus,
-        received_by: receivedBy,
-        received_date: new Date().toISOString().split('T')[0],
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', remittanceId)
-      .select()
-      .single();
+    // NOTA: El trigger en la BD puede estar intentando acceder a cancellation_reason que no existe
+    // Intentamos usar función RPC si existe, sino usamos actualización directa
+    let data, error;
+    
+    // Intentar primero con función RPC (si fue creada en la BD)
+    try {
+      const rpcResult = await supabase.rpc('update_remittance_received', {
+        p_remittance_id: remittanceId,
+        p_status: finalStatus,
+        p_received_by: receivedBy,
+        p_received_date: new Date().toISOString().split('T')[0]
+      });
+      
+      if (rpcResult.error) {
+        // Si el error es que la función no existe, intentar actualización directa
+        if (rpcResult.error.message && (
+          rpcResult.error.message.includes('function') || 
+          rpcResult.error.message.includes('does not exist') ||
+          rpcResult.error.message.includes('not found')
+        )) {
+          throw new Error('RPC function not available');
+        }
+        // Otro tipo de error de la función RPC
+        throw rpcResult.error;
+      }
+      
+      if (rpcResult.data && rpcResult.data.length > 0) {
+        // La función RPC retorna TABLE(result JSON), así que el resultado está en result
+        let resultData = rpcResult.data[0];
+        
+        // Si tiene la propiedad 'result', extraer el JSON
+        if (resultData.result) {
+          // Si result es string, parsearlo
+          if (typeof resultData.result === 'string') {
+            data = JSON.parse(resultData.result);
+          } else {
+            // Si ya es objeto, usarlo directamente
+            data = resultData.result;
+          }
+        } else {
+          // Si no tiene 'result', usar el objeto completo
+          data = resultData;
+        }
+        
+        error = null;
+        console.log('✅ Remito actualizado usando función RPC');
+      } else {
+        // La función no retornó datos, obtener el remito actualizado manualmente
+        const fetchResult = await supabase
+          .from('remittances')
+          .select()
+          .eq('id', remittanceId)
+          .single();
+        
+        data = fetchResult.data;
+        error = fetchResult.error;
+      }
+    } catch (rpcError) {
+      // RPC no disponible o falló, usar actualización directa
+      console.warn('Función RPC no disponible, usando actualización directa:', rpcError.message);
+      
+      // Intentar actualización directa (puede fallar por el trigger)
+      const updateResult = await supabase
+        .from('remittances')
+        .update({
+          status: finalStatus,
+          received_by: receivedBy,
+          received_date: new Date().toISOString().split('T')[0],
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', remittanceId)
+        .select()
+        .single();
+      
+      data = updateResult.data;
+      error = updateResult.error;
+      
+      // Si el error es sobre cancellation_reason, proporcionar instrucciones claras
+      if (error && error.message && error.message.includes('cancellation_reason')) {
+        const errorMsg = `
+❌ Error en trigger de base de datos
+
+El trigger está intentando acceder al campo 'cancellation_reason' que no existe en la tabla 'remittances'.
+
+SOLUCIÓN:
+1. Ve al SQL Editor de Supabase
+2. Ejecuta la función SQL del archivo 'fix_remittance_trigger.sql' que se creó en el proyecto
+3. O corrige el trigger manualmente para que no referencie 'cancellation_reason'
+
+El archivo fix_remittance_trigger.sql contiene el SQL necesario para crear una función RPC
+que actualiza los remitos sin el problema del trigger.
+        `.trim();
+        
+        console.error(errorMsg);
+        throw new Error('Error en trigger: cancellation_reason no existe. Ver fix_remittance_trigger.sql para la solución.');
+      }
+    }
 
     if (error) throw error;
 
@@ -563,7 +649,50 @@ export async function actualizarItemRemito(itemId, updates) {
  * @returns {Object} Ítem actualizado
  */
 export async function vincularInputAlItem(itemId, inputId) {
-  return actualizarItemRemito(itemId, { input_id: inputId });
+  const updated = await actualizarItemRemito(itemId, { input_id: inputId });
+  
+  // Verificar si el remito necesita cambiar a 'received' después de vincular
+  // Obtener el remito y sus items
+  const { data: item } = await supabase
+    .from('remittance_items')
+    .select('remittance_id')
+    .eq('id', itemId)
+    .single();
+  
+  if (item?.remittance_id) {
+    const { data: remittance } = await supabase
+      .from('remittances')
+      .select(`
+        id,
+        status,
+        items:remittance_items(
+          id,
+          quantity_ordered,
+          quantity_received,
+          input_id
+        )
+      `)
+      .eq('id', item.remittance_id)
+      .single();
+    
+    if (remittance && remittance.status === 'partially_received') {
+      // Verificar si todos los items tienen input_id y están recibidos
+      const allItemsHaveInput = remittance.items.every(i => i.input_id !== null);
+      const allItemsReceived = remittance.items.every(
+        i => i.quantity_received >= (i.quantity_ordered || 0)
+      );
+      
+      if (allItemsHaveInput && allItemsReceived) {
+        // Cambiar a 'received' para que el trigger se ejecute
+        await supabase
+          .from('remittances')
+          .update({ status: 'received' })
+          .eq('id', item.remittance_id);
+      }
+    }
+  }
+  
+  return updated;
 }
 
 /**
