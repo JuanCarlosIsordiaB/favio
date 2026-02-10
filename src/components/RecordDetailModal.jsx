@@ -1,42 +1,59 @@
-import React from 'react';
-import { X, Calendar, Tag, FileText, DollarSign, MapPin, Activity, Droplets, Package, Tractor, ClipboardList, Building2, Phone, Mail, Truck, CreditCard } from 'lucide-react';
+import React from "react";
+import {
+  X,
+  Calendar,
+  Tag,
+  FileText,
+  DollarSign,
+  MapPin,
+  Activity,
+  Droplets,
+  Package,
+  Tractor,
+  ClipboardList,
+  Building2,
+  Phone,
+  Mail,
+  Truck,
+  CreditCard,
+} from "lucide-react";
 
 // Función para traducir módulos técnicos a nombres amigables en español
 const translateModule = (modulo) => {
-  if (!modulo) return 'Sistema';
-  
+  if (!modulo) return "Sistema";
+
   const moduleMap = {
-    'purchase_orders': 'Órdenes de Compra',
-    'modulo_08_finanzas': 'Módulo 08 - Finanzas',
-    'firmas': 'Firmas',
-    'work_manager': 'Gestor de Trabajos',
-    'personnel_manager': 'Gestor de Personal',
-    'integration_manager': 'Gestor de Integraciones',
-    'machinery_manager': 'Gestor de Maquinaria',
-    'performance_evaluations': 'Evaluaciones de Desempeño',
-    'alertas_automaticas': 'Alertas Automáticas',
-    'alertas_recordatorios': 'Alertas y Recordatorios',
-    'modulo_17_ventas': 'Módulo 17 - Ventas',
-    'monitoring_integration': 'Integración de Monitoreo',
-    'modulo_11': 'Módulo 11',
-    'livestock_monitoring': 'Monitoreo de Ganado',
-    'rainfall_manager': 'Gestor de Lluvias',
-    'seed_analysis': 'Análisis de Semillas',
-    'agricultural_monitoring': 'Monitoreo Agrícola',
-    'soil_analysis': 'Análisis de Suelos',
-    'gestiones': 'Gestiones',
-    'remittances': 'Remesas',
-    'remitos': 'Remitos',
-    'lotes_y_mapas': 'Lotes y Mapas',
-    'lotes': 'Lotes',
-    'input_manager': 'Gestor de Insumos',
-    'insumos': 'Insumos',
-    'projections': 'Proyecciones',
-    'stock_movement': 'Movimiento de Stock',
-    'predios': 'Predios',
-    'payment_orders': 'Órdenes de Pago'
+    purchase_orders: "Órdenes de Compra",
+    modulo_08_finanzas: "Módulo 08 - Finanzas",
+    firmas: "Firmas",
+    work_manager: "Gestor de Trabajos",
+    personnel_manager: "Gestor de Personal",
+    integration_manager: "Gestor de Integraciones",
+    machinery_manager: "Gestor de Maquinaria",
+    performance_evaluations: "Evaluaciones de Desempeño",
+    alertas_automaticas: "Alertas Automáticas",
+    alertas_recordatorios: "Alertas y Recordatorios",
+    modulo_17_ventas: "Módulo 17 - Ventas",
+    monitoring_integration: "Integración de Monitoreo",
+    modulo_11: "Módulo 11",
+    livestock_monitoring: "Monitoreo de Ganado",
+    rainfall_manager: "Gestor de Lluvias",
+    seed_analysis: "Análisis de Semillas",
+    agricultural_monitoring: "Monitoreo Agrícola",
+    soil_analysis: "Análisis de Suelos",
+    gestiones: "Gestiones",
+    remittances: "Remesas",
+    remitos: "Remitos",
+    lotes_y_mapas: "Lotes y Mapas",
+    lotes: "Lotes",
+    input_manager: "Gestor de Insumos",
+    insumos: "Insumos",
+    projections: "Proyecciones",
+    stock_movement: "Movimiento de Stock",
+    predios: "Predios",
+    payment_orders: "Órdenes de Pago",
   };
-  
+
   return moduleMap[modulo] || modulo;
 };
 
@@ -46,23 +63,26 @@ export default function RecordDetailModal({ record, onClose }) {
   const { originalData, type, color } = record;
 
   const formatCurrency = (amount) => {
-    if (amount === null || amount === undefined) return '-';
-    return new Intl.NumberFormat('es-UY', { style: 'currency', currency: 'UYU' }).format(amount);
+    if (amount === null || amount === undefined) return "-";
+    return new Intl.NumberFormat("es-UY", {
+      style: "currency",
+      currency: "UYU",
+    }).format(amount);
   };
 
   const formatDate = (dateString) => {
-    if (!dateString) return '-';
-    return new Date(dateString).toLocaleDateString('es-UY', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-      hour: '2-digit',
-      minute: '2-digit'
+    if (!dateString) return "-";
+    return new Date(dateString).toLocaleDateString("es-UY", {
+      year: "numeric",
+      month: "long",
+      day: "numeric",
+      hour: "2-digit",
+      minute: "2-digit",
     });
   };
 
   const renderField = (label, value, icon = null) => {
-    if (value === null || value === undefined || value === '') return null;
+    if (value === null || value === undefined || value === "") return null;
     return (
       <div className="mb-3">
         <p className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-1 flex items-center gap-1">
@@ -76,36 +96,53 @@ export default function RecordDetailModal({ record, onClose }) {
 
   const renderAuditInfo = () => (
     <div className="bg-slate-50 border border-slate-200 rounded-lg p-4 mb-4">
-      <h4 className="text-xs font-semibold text-slate-500 uppercase mb-3">Información de Auditoría</h4>
+      <h4 className="text-xs font-semibold text-slate-500 uppercase mb-3">
+        Información de Auditoría
+      </h4>
       <div className="grid grid-cols-2 gap-3">
-        {renderField('Usuario', originalData.usuario, <Activity />)}
-        {renderField('Módulo Origen', translateModule(originalData.modulo_origen), <FileText />)}
-        {renderField('Fecha/Hora', formatDate(originalData.fecha), <Calendar />)}
-        {renderField('ID Firma', originalData.firma_id ? originalData.firma_id.slice(0, 8) + '...' : '-')}
-        {originalData.predio_id && renderField('ID Predio', originalData.predio_id.slice(0, 8) + '...')}
-        {originalData.lote_id && renderField('ID Lote', originalData.lote_id.slice(0, 8) + '...')}
+        {renderField("Usuario", originalData.usuario, <Activity />)}
+        {renderField(
+          "Módulo Origen",
+          translateModule(originalData.modulo_origen),
+          <FileText />,
+        )}
+        {renderField(
+          "Fecha/Hora",
+          formatDate(originalData.fecha),
+          <Calendar />,
+        )}
+        {renderField(
+          "ID Firma",
+          originalData.firma_id
+            ? originalData.firma_id.slice(0, 8) + "..."
+            : "-",
+        )}
+        {originalData.predio_id &&
+          renderField("ID Predio", originalData.predio_id.slice(0, 8) + "...")}
+        {originalData.lote_id &&
+          renderField("ID Lote", originalData.lote_id.slice(0, 8) + "...")}
       </div>
     </div>
   );
 
   const renderPurchaseOrderDetails = (metadata) => {
     const paymentTermsMap = {
-      'contado': 'Contado (100%)',
-      '30_dias': '30 días',
-      '60_dias': '60 días',
-      '90_dias': '90 días',
-      '50_50': '50/50 (30 y 60 días)',
-      '33_33_34': '33/33/34 (30, 60 y 90 días)',
-      '25_25_25_25': '25/25/25/25 (30, 60, 90 y 120 días)',
-      '40_60': '40/60 (Anticipo y saldo)'
+      contado: "Contado (100%)",
+      "30_dias": "30 días",
+      "60_dias": "60 días",
+      "90_dias": "90 días",
+      "50_50": "50/50 (30 y 60 días)",
+      "33_33_34": "33/33/34 (30, 60 y 90 días)",
+      "25_25_25_25": "25/25/25/25 (30, 60, 90 y 120 días)",
+      "40_60": "40/60 (Anticipo y saldo)",
     };
 
     const statusMap = {
-      'draft': 'Borrador',
-      'approved': 'Aprobada',
-      'sent': 'Enviada',
-      'received': 'Recibida',
-      'cancelled': 'Cancelada'
+      draft: "Borrador",
+      approved: "Aprobada",
+      sent: "Enviada",
+      received: "Recibida",
+      cancelled: "Cancelada",
     };
 
     return (
@@ -117,14 +154,40 @@ export default function RecordDetailModal({ record, onClose }) {
             Información de la Orden
           </h4>
           <div className="grid grid-cols-2 gap-3">
-            {renderField('Nº Orden', metadata.order_number, <Tag />)}
-            {renderField('Fecha', metadata.order_date ? formatDate(metadata.order_date) : null, <Calendar />)}
-            {renderField('Estado', statusMap[metadata.status] || metadata.status, <Activity />)}
-            {renderField('Moneda', metadata.currency, <DollarSign />)}
-            {metadata.exchange_rate && renderField('Tipo de Cambio', `${parseFloat(metadata.exchange_rate).toFixed(2)} UYU/USD`)}
-            {renderField('Condiciones de Pago', paymentTermsMap[metadata.payment_terms] || metadata.payment_terms, <CreditCard />)}
-            {metadata.delivery_date && renderField('Fecha Entrega', formatDate(metadata.delivery_date), <Calendar />)}
-            {metadata.delivery_address && renderField('Dirección Entrega', metadata.delivery_address, <MapPin />)}
+            {renderField("Nº Orden", metadata.order_number, <Tag />)}
+            {renderField(
+              "Fecha",
+              metadata.order_date ? formatDate(metadata.order_date) : null,
+              <Calendar />,
+            )}
+            {renderField(
+              "Estado",
+              statusMap[metadata.status] || metadata.status,
+              <Activity />,
+            )}
+            {renderField("Moneda", metadata.currency, <DollarSign />)}
+            {metadata.exchange_rate &&
+              renderField(
+                "Tipo de Cambio",
+                `${parseFloat(metadata.exchange_rate).toFixed(2)} UYU/USD`,
+              )}
+            {renderField(
+              "Condiciones de Pago",
+              paymentTermsMap[metadata.payment_terms] || metadata.payment_terms,
+              <CreditCard />,
+            )}
+            {metadata.delivery_date &&
+              renderField(
+                "Fecha Entrega",
+                formatDate(metadata.delivery_date),
+                <Calendar />,
+              )}
+            {metadata.delivery_address &&
+              renderField(
+                "Dirección Entrega",
+                metadata.delivery_address,
+                <MapPin />,
+              )}
           </div>
         </div>
 
@@ -135,43 +198,56 @@ export default function RecordDetailModal({ record, onClose }) {
             Proveedor
           </h4>
           <div className="grid grid-cols-2 gap-3">
-            {renderField('Nombre', metadata.supplier_name, <Building2 />)}
-            {renderField('RUT', metadata.supplier_rut, <Tag />)}
-            {renderField('Teléfono', metadata.supplier_phone, <Phone />)}
-            {renderField('Email', metadata.supplier_email, <Mail />)}
-            {metadata.supplier_address && renderField('Dirección', metadata.supplier_address, <MapPin />)}
+            {renderField("Nombre", metadata.supplier_name, <Building2 />)}
+            {renderField("RUT", metadata.supplier_rut, <Tag />)}
+            {renderField("Teléfono", metadata.supplier_phone, <Phone />)}
+            {renderField("Email", metadata.supplier_email, <Mail />)}
+            {metadata.supplier_address &&
+              renderField("Dirección", metadata.supplier_address, <MapPin />)}
           </div>
         </div>
 
         {/* Productos */}
-        {metadata.items && Array.isArray(metadata.items) && metadata.items.length > 0 && (
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-            <h4 className="text-sm font-semibold text-amber-900 mb-3 flex items-center gap-2">
-              <Package size={16} />
-              Productos ({metadata.items.length})
-            </h4>
-            <div className="space-y-2 max-h-64 overflow-y-auto">
-              {metadata.items.map((item, index) => (
-                <div key={index} className="bg-white rounded p-3 border border-amber-200">
-                  <div className="flex justify-between items-start mb-2">
-                    <div className="flex-1">
-                      <p className="font-medium text-slate-900">{item.description || item.item_description || 'Sin descripción'}</p>
-                      <p className="text-xs text-slate-600">
-                        {item.quantity} {item.unit} × {metadata.currency === 'USD' ? 'US$' : '$'}{parseFloat(item.unit_price || 0).toFixed(2)}
-                        {item.tax_rate > 0 && ` (IVA ${item.tax_rate}%)`}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-semibold text-slate-900">
-                        {metadata.currency === 'USD' ? 'US$' : '$'}{parseFloat(item.total || 0).toFixed(2)}
-                      </p>
+        {metadata.items &&
+          Array.isArray(metadata.items) &&
+          metadata.items.length > 0 && (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+              <h4 className="text-sm font-semibold text-amber-900 mb-3 flex items-center gap-2">
+                <Package size={16} />
+                Productos ({metadata.items.length})
+              </h4>
+              <div className="space-y-2 max-h-64 overflow-y-auto">
+                {metadata.items.map((item, index) => (
+                  <div
+                    key={index}
+                    className="bg-white rounded p-3 border border-amber-200"
+                  >
+                    <div className="flex justify-between items-start mb-2">
+                      <div className="flex-1">
+                        <p className="font-medium text-slate-900">
+                          {item.description ||
+                            item.item_description ||
+                            "Sin descripción"}
+                        </p>
+                        <p className="text-xs text-slate-600">
+                          {item.quantity} {item.unit} ×{" "}
+                          {metadata.currency === "USD" ? "US$" : "$"}
+                          {parseFloat(item.unit_price || 0).toFixed(2)}
+                          {item.tax_rate > 0 && ` (IVA ${item.tax_rate}%)`}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-semibold text-slate-900">
+                          {metadata.currency === "USD" ? "US$" : "$"}
+                          {parseFloat(item.total || 0).toFixed(2)}
+                        </p>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
         {/* Totales */}
         <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
@@ -180,9 +256,24 @@ export default function RecordDetailModal({ record, onClose }) {
             Totales
           </h4>
           <div className="space-y-2">
-            {renderField('Subtotal', metadata.subtotal ? `${metadata.currency === 'USD' ? 'US$' : '$'}${parseFloat(metadata.subtotal).toFixed(2)}` : null)}
-            {renderField('IVA', metadata.tax_amount ? `${metadata.currency === 'USD' ? 'US$' : '$'}${parseFloat(metadata.tax_amount).toFixed(2)}` : null)}
-            {renderField('Total', metadata.total_amount ? `${metadata.currency === 'USD' ? 'US$' : '$'}${parseFloat(metadata.total_amount).toFixed(2)}` : null)}
+            {renderField(
+              "Subtotal",
+              metadata.subtotal
+                ? `${metadata.currency === "USD" ? "US$" : "$"}${parseFloat(metadata.subtotal).toFixed(2)}`
+                : null,
+            )}
+            {renderField(
+              "IVA",
+              metadata.tax_amount
+                ? `${metadata.currency === "USD" ? "US$" : "$"}${parseFloat(metadata.tax_amount).toFixed(2)}`
+                : null,
+            )}
+            {renderField(
+              "Total",
+              metadata.total_amount
+                ? `${metadata.currency === "USD" ? "US$" : "$"}${parseFloat(metadata.total_amount).toFixed(2)}`
+                : null,
+            )}
           </div>
         </div>
 
@@ -190,7 +281,9 @@ export default function RecordDetailModal({ record, onClose }) {
         {metadata.notes && (
           <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
             <h4 className="text-sm font-semibold text-slate-900 mb-2">Notas</h4>
-            <p className="text-slate-700 text-sm whitespace-pre-wrap">{metadata.notes}</p>
+            <p className="text-slate-700 text-sm whitespace-pre-wrap">
+              {metadata.notes}
+            </p>
           </div>
         )}
       </div>
@@ -199,23 +292,26 @@ export default function RecordDetailModal({ record, onClose }) {
 
   const renderExpenseDetails = (metadata) => {
     const paymentTermsMap = {
-      'contado': 'Contado (100%)',
-      '30_dias': '30 días',
-      '60_dias': '60 días',
-      '90_dias': '90 días',
-      '50_50': '50/50 (30 y 60 días)',
-      '33_33_34': '33/33/34 (30, 60 y 90 días)',
-      '25_25_25_25': '25/25/25/25 (30, 60, 90 y 120 días)',
-      '40_60': '40/60 (Anticipo y saldo)'
+      contado: "Contado (100%)",
+      "30_dias": "30 días",
+      "60_dias": "60 días",
+      "90_dias": "90 días",
+      "50_50": "50/50 (30 y 60 días)",
+      "33_33_34": "33/33/34 (30, 60 y 90 días)",
+      "25_25_25_25": "25/25/25/25 (30, 60, 90 y 120 días)",
+      "40_60": "40/60 (Anticipo y saldo)",
     };
 
     const statusMap = {
-      'DRAFT': 'Borrador',
-      'REGISTERED': 'Registrada',
-      'APPROVED': 'Crédito',
-      'PAID_PARTIAL': 'Pagada Parcial',
-      'PAID': 'Contado',
-      'CANCELLED': 'Anulada'
+      DRAFT: "Borrador",
+      REGISTERED: "Registrada",
+      APPROVED: "Crédito",
+      PAID_PARTIAL: "Pagada Parcial",
+      PAID: "Contado",
+      pendiente: "Pendiente",
+      completada: "Completada",
+      cancelada: "Anulada",
+      CANCELLED: "Anulada",
     };
 
     return (
@@ -227,16 +323,37 @@ export default function RecordDetailModal({ record, onClose }) {
             Información de la Factura
           </h4>
           <div className="grid grid-cols-2 gap-3">
-            {renderField('Serie', metadata.invoice_series, <Tag />)}
-            {renderField('Número', metadata.invoice_number, <Tag />)}
-            {renderField('Factura Completa', metadata.invoice_full, <FileText />)}
-            {renderField('Fecha', metadata.invoice_date ? formatDate(metadata.invoice_date) : null, <Calendar />)}
-            {renderField('Estado', statusMap[metadata.status] || metadata.status, <Activity />)}
-            {renderField('Moneda', metadata.currency, <DollarSign />)}
-            {renderField('Categoría', metadata.category, <Tag />)}
-            {renderField('Concepto', metadata.concept, <FileText />)}
-            {renderField('Condiciones de Pago', paymentTermsMap[metadata.payment_terms] || metadata.payment_terms, <CreditCard />)}
-            {metadata.due_date && renderField('Fecha Vencimiento', formatDate(metadata.due_date), <Calendar />)}
+            {renderField("Serie", metadata.invoice_series, <Tag />)}
+            {renderField("Número", metadata.invoice_number, <Tag />)}
+            {renderField(
+              "Factura Completa",
+              metadata.invoice_full,
+              <FileText />,
+            )}
+            {renderField(
+              "Fecha",
+              metadata.invoice_date ? formatDate(metadata.invoice_date) : null,
+              <Calendar />,
+            )}
+            {renderField(
+              "Estado",
+              statusMap[metadata.status] || metadata.status,
+              <Activity />,
+            )}
+            {renderField("Moneda", metadata.currency, <DollarSign />)}
+            {renderField("Categoría", metadata.category, <Tag />)}
+            {renderField("Concepto", metadata.concept, <FileText />)}
+            {renderField(
+              "Condiciones de Pago",
+              paymentTermsMap[metadata.payment_terms] || metadata.payment_terms,
+              <CreditCard />,
+            )}
+            {metadata.due_date &&
+              renderField(
+                "Fecha Vencimiento",
+                formatDate(metadata.due_date),
+                <Calendar />,
+              )}
           </div>
         </div>
 
@@ -247,43 +364,65 @@ export default function RecordDetailModal({ record, onClose }) {
             Proveedor
           </h4>
           <div className="grid grid-cols-2 gap-3">
-            {renderField('Nombre', metadata.provider_name || metadata.provider, <Building2 />)}
-            {renderField('RUT', metadata.provider_rut, <Tag />)}
-            {renderField('Teléfono', metadata.provider_phone, <Phone />)}
-            {renderField('Email', metadata.provider_email, <Mail />)}
-            {metadata.provider_address && renderField('Dirección', metadata.provider_address, <MapPin />)}
+            {renderField(
+              "Nombre",
+              metadata.provider_name || metadata.provider,
+              <Building2 />,
+            )}
+            {renderField("RUT", metadata.provider_rut, <Tag />)}
+            {renderField("Teléfono", metadata.provider_phone, <Phone />)}
+            {renderField("Email", metadata.provider_email, <Mail />)}
+            {metadata.provider_address &&
+              renderField("Dirección", metadata.provider_address, <MapPin />)}
           </div>
         </div>
 
         {/* Items/Productos */}
-        {metadata.items && Array.isArray(metadata.items) && metadata.items.length > 0 && (
-          <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
-            <h4 className="text-sm font-semibold text-amber-900 mb-3 flex items-center gap-2">
-              <Package size={16} />
-              Productos ({metadata.items.length})
-            </h4>
-            <div className="space-y-2 max-h-64 overflow-y-auto">
-              {metadata.items.map((item, index) => (
-                <div key={index} className="bg-white rounded p-3 border border-amber-200">
-                  <div className="flex justify-between items-start mb-2">
-                    <div className="flex-1">
-                      <p className="font-medium text-slate-900">{item.concept || item.description || 'Sin descripción'}</p>
-                      <p className="text-xs text-slate-600">
-                        {item.quantity} {item.unit} × {metadata.currency === 'USD' ? 'US$' : '$'}{parseFloat(item.unit_price || 0).toFixed(2)}
-                        {item.tax_rate > 0 && ` (IVA ${item.tax_rate}%)`}
-                      </p>
-                    </div>
-                    <div className="text-right">
-                      <p className="font-semibold text-slate-900">
-                        {metadata.currency === 'USD' ? 'US$' : '$'}{parseFloat(item.total || ((item.quantity || 0) * (item.unit_price || 0) * (1 + (item.tax_rate || 22) / 100))).toFixed(2)}
-                      </p>
+        {metadata.items &&
+          Array.isArray(metadata.items) &&
+          metadata.items.length > 0 && (
+            <div className="bg-amber-50 border border-amber-200 rounded-lg p-4">
+              <h4 className="text-sm font-semibold text-amber-900 mb-3 flex items-center gap-2">
+                <Package size={16} />
+                Productos ({metadata.items.length})
+              </h4>
+              <div className="space-y-2 max-h-64 overflow-y-auto">
+                {metadata.items.map((item, index) => (
+                  <div
+                    key={index}
+                    className="bg-white rounded p-3 border border-amber-200"
+                  >
+                    <div className="flex justify-between items-start mb-2">
+                      <div className="flex-1">
+                        <p className="font-medium text-slate-900">
+                          {item.concept ||
+                            item.description ||
+                            "Sin descripción"}
+                        </p>
+                        <p className="text-xs text-slate-600">
+                          {item.quantity} {item.unit} ×{" "}
+                          {metadata.currency === "USD" ? "US$" : "$"}
+                          {parseFloat(item.unit_price || 0).toFixed(2)}
+                          {item.tax_rate > 0 && ` (IVA ${item.tax_rate}%)`}
+                        </p>
+                      </div>
+                      <div className="text-right">
+                        <p className="font-semibold text-slate-900">
+                          {metadata.currency === "USD" ? "US$" : "$"}
+                          {parseFloat(
+                            item.total ||
+                              (item.quantity || 0) *
+                                (item.unit_price || 0) *
+                                (1 + (item.tax_rate || 22) / 100),
+                          ).toFixed(2)}
+                        </p>
+                      </div>
                     </div>
                   </div>
-                </div>
-              ))}
+                ))}
+              </div>
             </div>
-          </div>
-        )}
+          )}
 
         {/* Totales */}
         <div className="bg-purple-50 border border-purple-200 rounded-lg p-4">
@@ -292,9 +431,24 @@ export default function RecordDetailModal({ record, onClose }) {
             Totales
           </h4>
           <div className="space-y-2">
-            {renderField('Subtotal', metadata.subtotal ? `${metadata.currency === 'USD' ? 'US$' : '$'}${parseFloat(metadata.subtotal).toFixed(2)}` : null)}
-            {renderField('IVA', (metadata.iva_amount || metadata.tax_amount) ? `${metadata.currency === 'USD' ? 'US$' : '$'}${parseFloat(metadata.iva_amount || metadata.tax_amount).toFixed(2)}` : null)}
-            {renderField('Total', (metadata.total_amount || metadata.amount) ? `${metadata.currency === 'USD' ? 'US$' : '$'}${parseFloat(metadata.total_amount || metadata.amount).toFixed(2)}` : null)}
+            {renderField(
+              "Subtotal",
+              metadata.subtotal
+                ? `${metadata.currency === "USD" ? "US$" : "$"}${parseFloat(metadata.subtotal).toFixed(2)}`
+                : null,
+            )}
+            {renderField(
+              "IVA",
+              metadata.iva_amount || metadata.tax_amount
+                ? `${metadata.currency === "USD" ? "US$" : "$"}${parseFloat(metadata.iva_amount || metadata.tax_amount).toFixed(2)}`
+                : null,
+            )}
+            {renderField(
+              "Total",
+              metadata.total_amount || metadata.amount
+                ? `${metadata.currency === "USD" ? "US$" : "$"}${parseFloat(metadata.total_amount || metadata.amount).toFixed(2)}`
+                : null,
+            )}
           </div>
         </div>
 
@@ -302,7 +456,9 @@ export default function RecordDetailModal({ record, onClose }) {
         {metadata.notes && (
           <div className="bg-slate-50 border border-slate-200 rounded-lg p-4">
             <h4 className="text-sm font-semibold text-slate-900 mb-2">Notas</h4>
-            <p className="text-slate-700 text-sm whitespace-pre-wrap">{metadata.notes}</p>
+            <p className="text-slate-700 text-sm whitespace-pre-wrap">
+              {metadata.notes}
+            </p>
           </div>
         )}
       </div>
@@ -321,20 +477,24 @@ export default function RecordDetailModal({ record, onClose }) {
     }
 
     // Si es una orden de compra, mostrar detalles especiales
-    if (originalData.tipo === 'orden_compra' || type === 'Orden Compra') {
+    if (originalData.tipo === "orden_compra" || type === "Orden Compra") {
       return renderPurchaseOrderDetails(metadata);
     }
 
     // Si es una factura de compra, mostrar detalles especiales
-    if (originalData.tipo === 'factura_creada' || type === 'Gasto' || (metadata.invoice_series && metadata.invoice_number)) {
+    if (
+      originalData.tipo === "factura_creada" ||
+      type === "Gasto" ||
+      (metadata.invoice_series && metadata.invoice_number)
+    ) {
       return renderExpenseDetails(metadata);
     }
 
     // Determinar si es una creación
-    const isCreation = originalData.tipo && (
-      originalData.tipo.includes('creada') || 
-      originalData.tipo.includes('creado')
-    );
+    const isCreation =
+      originalData.tipo &&
+      (originalData.tipo.includes("creada") ||
+        originalData.tipo.includes("creado"));
 
     // Para otros tipos, mostrar metadata genérico con mejor formato
     return (
@@ -356,10 +516,11 @@ export default function RecordDetailModal({ record, onClose }) {
           </h4>
           <div className="space-y-3">
             {Object.entries(metadata).map(([key, value]) => {
-              if (value === null || value === undefined || value === '') return null;
-              
+              if (value === null || value === undefined || value === "")
+                return null;
+
               // Manejar arrays de items
-              if (key === 'items' && Array.isArray(value)) {
+              if (key === "items" && Array.isArray(value)) {
                 return (
                   <div key={key} className="mb-3">
                     <p className="text-xs font-medium text-slate-500 uppercase tracking-wider mb-2">
@@ -367,25 +528,38 @@ export default function RecordDetailModal({ record, onClose }) {
                     </p>
                     <div className="space-y-2 max-h-48 overflow-y-auto">
                       {value.map((item, index) => (
-                        <div key={index} className="bg-white rounded p-3 border border-slate-200 text-sm">
-                          {typeof item === 'object' ? (
+                        <div
+                          key={index}
+                          className="bg-white rounded p-3 border border-slate-200 text-sm"
+                        >
+                          {typeof item === "object" ? (
                             <div>
-                              {(item.description || item.concept || item.name) && (
-                                <p className="font-medium text-slate-900">{item.description || item.concept || item.name}</p>
+                              {(item.description ||
+                                item.concept ||
+                                item.name) && (
+                                <p className="font-medium text-slate-900">
+                                  {item.description ||
+                                    item.concept ||
+                                    item.name}
+                                </p>
                               )}
                               {item.quantity && (
                                 <p className="text-xs text-slate-600 mt-1">
-                                  Cantidad: {item.quantity} {item.unit || ''}
+                                  Cantidad: {item.quantity} {item.unit || ""}
                                 </p>
                               )}
                               {item.unit_price && (
                                 <p className="text-xs text-slate-600">
-                                  Precio: {metadata.currency === 'USD' ? 'US$' : '$'}{parseFloat(item.unit_price).toFixed(2)}
+                                  Precio:{" "}
+                                  {metadata.currency === "USD" ? "US$" : "$"}
+                                  {parseFloat(item.unit_price).toFixed(2)}
                                 </p>
                               )}
                               {item.total && (
                                 <p className="text-xs font-semibold text-slate-900 mt-1">
-                                  Total: {metadata.currency === 'USD' ? 'US$' : '$'}{parseFloat(item.total).toFixed(2)}
+                                  Total:{" "}
+                                  {metadata.currency === "USD" ? "US$" : "$"}
+                                  {parseFloat(item.total).toFixed(2)}
                                 </p>
                               )}
                             </div>
@@ -411,7 +585,9 @@ export default function RecordDetailModal({ record, onClose }) {
                         {value.map((item, index) => (
                           <li key={index} className="flex items-center gap-2">
                             <span className="w-1.5 h-1.5 bg-slate-400 rounded-full"></span>
-                            {typeof item === 'object' ? JSON.stringify(item, null, 2) : String(item)}
+                            {typeof item === "object"
+                              ? JSON.stringify(item, null, 2)
+                              : String(item)}
                           </li>
                         ))}
                       </ul>
@@ -443,61 +619,78 @@ export default function RecordDetailModal({ record, onClose }) {
 
   const getFieldLabel = (key) => {
     const fieldLabels = {
-      'amount': 'Monto',
-      'provider': 'Proveedor',
-      'invoice_full': 'Factura Completa',
-      'invoice_series': 'Serie',
-      'invoice_number': 'Número',
-      'invoice_date': 'Fecha Factura',
-      'provider_name': 'Proveedor',
-      'provider_rut': 'RUT',
-      'provider_email': 'Email',
-      'provider_phone': 'Teléfono',
-      'provider_address': 'Dirección',
-      'category': 'Categoría',
-      'concept': 'Concepto',
-      'currency': 'Moneda',
-      'status': 'Estado',
-      'payment_terms': 'Condiciones de Pago',
-      'due_date': 'Fecha Vencimiento',
-      'notes': 'Notas',
-      'subtotal': 'Subtotal',
-      'iva_amount': 'IVA',
-      'tax_amount': 'IVA',
-      'total_amount': 'Total',
-      'items_count': 'Cantidad de Productos',
-      'order_number': 'Número de Orden',
-      'beneficiary_name': 'Beneficiario',
-      'beneficiary_rut': 'RUT Beneficiario',
-      'beneficiary_bank': 'Banco',
-      'beneficiary_account': 'Cuenta',
-      'payment_method': 'Método de Pago',
-      'facturas_count': 'Cantidad de Facturas',
-      'facturas': 'Facturas',
-      'facturas_actualizadas': 'Facturas Actualizadas',
-      'factura_ids': 'IDs de Facturas',
-      'name': 'Nombre',
-      'description': 'Descripción',
-      'date': 'Fecha',
-      'quantity': 'Cantidad',
-      'unit': 'Unidad',
-      'price': 'Precio',
-      'total': 'Total',
-      'created_at': 'Fecha de Creación',
-      'updated_at': 'Fecha de Actualización'
+      amount: "Monto",
+      provider: "Proveedor",
+      invoice_full: "Factura Completa",
+      invoice_series: "Serie",
+      invoice_number: "Número",
+      invoice_date: "Fecha Factura",
+      provider_name: "Proveedor",
+      provider_rut: "RUT",
+      provider_email: "Email",
+      provider_phone: "Teléfono",
+      provider_address: "Dirección",
+      category: "Categoría",
+      concept: "Concepto",
+      currency: "Moneda",
+      status: "Estado",
+      payment_terms: "Condiciones de Pago",
+      due_date: "Fecha Vencimiento",
+      notes: "Notas",
+      subtotal: "Subtotal",
+      iva_amount: "IVA",
+      tax_amount: "IVA",
+      total_amount: "Total",
+      items_count: "Cantidad de Productos",
+      order_number: "Número de Orden",
+      beneficiary_name: "Beneficiario",
+      beneficiary_rut: "RUT Beneficiario",
+      beneficiary_bank: "Banco",
+      beneficiary_account: "Cuenta",
+      payment_method: "Método de Pago",
+      facturas_count: "Cantidad de Facturas",
+      facturas: "Facturas",
+      facturas_actualizadas: "Facturas Actualizadas",
+      factura_ids: "IDs de Facturas",
+      name: "Nombre",
+      description: "Descripción",
+      date: "Fecha",
+      quantity: "Cantidad",
+      unit: "Unidad",
+      price: "Precio",
+      total: "Total",
+      created_at: "Fecha de Creación",
+      updated_at: "Fecha de Actualización",
     };
-    return fieldLabels[key] || key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+    return (
+      fieldLabels[key] ||
+      key.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase())
+    );
   };
 
   const formatFieldValue = (key, value, metadata) => {
     // Formatear montos
-    if ((key.includes('amount') || key.includes('total') || key.includes('price') || key === 'subtotal' || key === 'iva_amount' || key === 'tax_amount') && typeof value === 'number') {
-      const currency = metadata.currency || 'UYU';
-      return `${currency === 'USD' ? 'US$' : '$'}${value.toFixed(2)}`;
+    if (
+      (key.includes("amount") ||
+        key.includes("total") ||
+        key.includes("price") ||
+        key === "subtotal" ||
+        key === "iva_amount" ||
+        key === "tax_amount") &&
+      typeof value === "number"
+    ) {
+      const currency = metadata.currency || "UYU";
+      return `${currency === "USD" ? "US$" : "$"}${value.toFixed(2)}`;
     }
 
     // Formatear fechas
-    if ((key.includes('date') || key.includes('fecha') || key.includes('created_at') || key.includes('updated_at')) && typeof value === 'string') {
+    if (
+      (key.includes("date") ||
+        key.includes("fecha") ||
+        key.includes("created_at") ||
+        key.includes("updated_at")) &&
+      typeof value === "string"
+    ) {
       try {
         return formatDate(value);
       } catch {
@@ -506,7 +699,7 @@ export default function RecordDetailModal({ record, onClose }) {
     }
 
     // Formatear objetos
-    if (typeof value === 'object' && !Array.isArray(value)) {
+    if (typeof value === "object" && !Array.isArray(value)) {
       return (
         <pre className="text-xs bg-slate-100 p-2 rounded overflow-auto max-h-40">
           {JSON.stringify(value, null, 2)}
@@ -515,8 +708,8 @@ export default function RecordDetailModal({ record, onClose }) {
     }
 
     // Formatear booleanos
-    if (typeof value === 'boolean') {
-      return value ? 'Sí' : 'No';
+    if (typeof value === "boolean") {
+      return value ? "Sí" : "No";
     }
 
     return String(value);
@@ -527,15 +720,21 @@ export default function RecordDetailModal({ record, onClose }) {
       <div className="bg-white rounded-xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto flex flex-col animate-in zoom-in-95 duration-200">
         <div className="flex justify-between items-center p-4 border-b sticky top-0 bg-white z-10">
           <div className="flex items-center gap-3">
-            <div className={`p-2 rounded-full ${color.replace('bg-', 'bg-opacity-20 bg-').split(' ')[0]} ${color.split(' ')[1]}`}>
+            <div
+              className={`p-2 rounded-full ${color.replace("bg-", "bg-opacity-20 bg-").split(" ")[0]} ${color.split(" ")[1]}`}
+            >
               <record.Icon size={20} />
             </div>
             <div>
-              <h3 className="font-bold text-lg text-slate-800">{record.title}</h3>
-              <p className="text-xs text-slate-500 uppercase tracking-wider">{type}</p>
+              <h3 className="font-bold text-lg text-slate-800">
+                {record.title}
+              </h3>
+              <p className="text-xs text-slate-500 uppercase tracking-wider">
+                {type}
+              </p>
             </div>
           </div>
-          <button 
+          <button
             onClick={onClose}
             className="p-2 hover:bg-slate-100 rounded-full transition-colors text-slate-500 hover:text-slate-700"
           >
@@ -549,7 +748,7 @@ export default function RecordDetailModal({ record, onClose }) {
         </div>
 
         <div className="p-4 border-t bg-slate-50 flex justify-end rounded-b-xl">
-          <button 
+          <button
             onClick={onClose}
             className="px-4 py-2 bg-white border border-slate-300 rounded-lg text-slate-700 font-medium hover:bg-slate-50 transition-colors"
           >

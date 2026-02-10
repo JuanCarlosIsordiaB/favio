@@ -4,7 +4,7 @@
  * Sincronizado con SCHEMA.sql tabla: inputs
  */
 
-import { supabase } from '../lib/supabase';
+import { supabase } from "../lib/supabase";
 
 /**
  * Sanitiza datos de insumo para operaciones CRUD
@@ -17,24 +17,21 @@ function sanitizarInsumoData(data) {
 
   // Campos numéricos que pueden ser opcionales
   const camposNumericos = [
-    'initial_stock',
-    'current_stock',
-    'min_stock_alert',
-    'cost_per_unit'
+    "initial_stock",
+    "current_stock",
+    "min_stock_alert",
+    "cost_per_unit",
   ];
 
   // Campos de fecha que pueden ser opcionales
-  const camposFecha = [
-    'expiration_date',
-    'entry_date'
-  ];
+  const camposFecha = ["expiration_date", "entry_date"];
 
-  camposNumericos.forEach(campo => {
+  camposNumericos.forEach((campo) => {
     if (campo in sanitized) {
       // Si está vacío o es string vacío, convertir a null
-      if (sanitized[campo] === '' || sanitized[campo] === undefined) {
+      if (sanitized[campo] === "" || sanitized[campo] === undefined) {
         sanitized[campo] = null;
-      } else if (typeof sanitized[campo] === 'string') {
+      } else if (typeof sanitized[campo] === "string") {
         // Si es string numérico, convertir a número
         const num = parseFloat(sanitized[campo]);
         sanitized[campo] = isNaN(num) ? null : num;
@@ -42,10 +39,10 @@ function sanitizarInsumoData(data) {
     }
   });
 
-  camposFecha.forEach(campo => {
+  camposFecha.forEach((campo) => {
     if (campo in sanitized) {
       // Si está vacío o es string vacío, convertir a null
-      if (sanitized[campo] === '' || sanitized[campo] === undefined) {
+      if (sanitized[campo] === "" || sanitized[campo] === undefined) {
         sanitized[campo] = null;
       }
       // Si tiene valor, dejar como está (PostgreSQL convertirá)
@@ -62,16 +59,16 @@ function sanitizarInsumoData(data) {
  */
 export async function obtenerInsumosDelFirma(firmId) {
   try {
-    if (!firmId) throw new Error('firmId es requerido');
+    if (!firmId) throw new Error("firmId es requerido");
 
     const { data, count, error } = await supabase
-      .from('inputs')
-      .select('*', { count: 'exact' })
-      .eq('firm_id', firmId)
-      .order('name', { ascending: true });
+      .from("inputs")
+      .select("*", { count: "exact" })
+      .eq("firm_id", firmId)
+      .order("name", { ascending: true });
 
     if (error) {
-      console.error('Error al obtener insumos:', error);
+      console.error("Error al obtener insumos:", error);
       throw error;
     }
 
@@ -80,7 +77,7 @@ export async function obtenerInsumosDelFirma(firmId) {
       count: count || 0,
     };
   } catch (error) {
-    console.error('Error en obtenerInsumosDelFirma:', error);
+    console.error("Error en obtenerInsumosDelFirma:", error);
     throw error;
   }
 }
@@ -92,22 +89,22 @@ export async function obtenerInsumosDelFirma(firmId) {
  */
 export async function obtenerInsumo(insumoId) {
   try {
-    if (!insumoId) throw new Error('insumoId es requerido');
+    if (!insumoId) throw new Error("insumoId es requerido");
 
     const { data, error } = await supabase
-      .from('inputs')
-      .select('*')
-      .eq('id', insumoId)
+      .from("inputs")
+      .select("*")
+      .eq("id", insumoId)
       .single();
 
     if (error) {
-      console.error('Error al obtener insumo:', error);
+      console.error("Error al obtener insumo:", error);
       throw error;
     }
 
     return data;
   } catch (error) {
-    console.error('Error en obtenerInsumo:', error);
+    console.error("Error en obtenerInsumo:", error);
     throw error;
   }
 }
@@ -120,18 +117,18 @@ export async function obtenerInsumo(insumoId) {
  */
 export async function obtenerInsumosPorCategoria(firmId, categoria) {
   try {
-    if (!firmId) throw new Error('firmId es requerido');
-    if (!categoria) throw new Error('categoria es requerido');
+    if (!firmId) throw new Error("firmId es requerido");
+    if (!categoria) throw new Error("categoria es requerido");
 
     const { data, count, error } = await supabase
-      .from('inputs')
-      .select('*', { count: 'exact' })
-      .eq('firm_id', firmId)
-      .eq('category', categoria)
-      .order('name', { ascending: true });
+      .from("inputs")
+      .select("*", { count: "exact" })
+      .eq("firm_id", firmId)
+      .eq("category", categoria)
+      .order("name", { ascending: true });
 
     if (error) {
-      console.error('Error al obtener insumos por categoría:', error);
+      console.error("Error al obtener insumos por categoría:", error);
       throw error;
     }
 
@@ -140,7 +137,7 @@ export async function obtenerInsumosPorCategoria(firmId, categoria) {
       count: count || 0,
     };
   } catch (error) {
-    console.error('Error en obtenerInsumosPorCategoria:', error);
+    console.error("Error en obtenerInsumosPorCategoria:", error);
     throw error;
   }
 }
@@ -153,18 +150,18 @@ export async function obtenerInsumosPorCategoria(firmId, categoria) {
  */
 export async function obtenerInsumosDelDeposito(firmId, depotId) {
   try {
-    if (!firmId) throw new Error('firmId es requerido');
-    if (!depotId) throw new Error('depotId es requerido');
+    if (!firmId) throw new Error("firmId es requerido");
+    if (!depotId) throw new Error("depotId es requerido");
 
     const { data, count, error } = await supabase
-      .from('inputs')
-      .select('*', { count: 'exact' })
-      .eq('firm_id', firmId)
-      .eq('depot_id', depotId)
-      .order('name', { ascending: true });
+      .from("inputs")
+      .select("*", { count: "exact" })
+      .eq("firm_id", firmId)
+      .eq("depot_id", depotId)
+      .order("name", { ascending: true });
 
     if (error) {
-      console.error('Error al obtener insumos del depósito:', error);
+      console.error("Error al obtener insumos del depósito:", error);
       throw error;
     }
 
@@ -173,7 +170,7 @@ export async function obtenerInsumosDelDeposito(firmId, depotId) {
       count: count || 0,
     };
   } catch (error) {
-    console.error('Error en obtenerInsumosDelDeposito:', error);
+    console.error("Error en obtenerInsumosDelDeposito:", error);
     throw error;
   }
 }
@@ -186,21 +183,23 @@ export async function obtenerInsumosDelDeposito(firmId, depotId) {
  */
 export async function buscarInsumos(firmId, busqueda) {
   try {
-    if (!firmId) throw new Error('firmId es requerido');
+    if (!firmId) throw new Error("firmId es requerido");
 
     let query = supabase
-      .from('inputs')
-      .select('*', { count: 'exact' })
-      .eq('firm_id', firmId);
+      .from("inputs")
+      .select("*", { count: "exact" })
+      .eq("firm_id", firmId);
 
     if (busqueda) {
-      query = query.ilike('name', `%${busqueda}%`);
+      query = query.ilike("name", `%${busqueda}%`);
     }
 
-    const { data, count, error } = await query.order('name', { ascending: true });
+    const { data, count, error } = await query.order("name", {
+      ascending: true,
+    });
 
     if (error) {
-      console.error('Error al buscar insumos:', error);
+      console.error("Error al buscar insumos:", error);
       throw error;
     }
 
@@ -209,7 +208,7 @@ export async function buscarInsumos(firmId, busqueda) {
       count: count || 0,
     };
   } catch (error) {
-    console.error('Error en buscarInsumos:', error);
+    console.error("Error en buscarInsumos:", error);
     throw error;
   }
 }
@@ -222,35 +221,36 @@ export async function buscarInsumos(firmId, busqueda) {
 export async function crearInsumo(insumoData) {
   try {
     // Validaciones mínimas según SCHEMA.sql
-    if (!insumoData.firm_id) throw new Error('firm_id es requerido');
-    if (!insumoData.name) throw new Error('name es requerido');
-    if (!insumoData.category) throw new Error('category es requerido');
-    if (!insumoData.unit) throw new Error('unit es requerido');
+    if (!insumoData.firm_id) throw new Error("firm_id es requerido");
+    if (!insumoData.name) throw new Error("name es requerido");
+    if (!insumoData.category) throw new Error("category es requerido");
+    if (!insumoData.unit) throw new Error("unit es requerido");
 
     // Sanitizar datos antes de insertar
     const sanitized = sanitizarInsumoData(insumoData);
 
     const { data, error } = await supabase
-      .from('inputs')
+      .from("inputs")
       .insert([
         {
           ...sanitized,
           current_stock: sanitized.current_stock || 0,
           min_stock_alert: sanitized.min_stock_alert || 0,
-          created_at: new Date().toISOString()
-        }
+          stock_status: sanitized.stock_status || "disponible",
+          created_at: new Date().toISOString(),
+        },
       ])
       .select()
       .single();
 
     if (error) {
-      console.error('Error al crear insumo:', error);
+      console.error("Error al crear insumo:", error);
       throw error;
     }
 
     return data;
   } catch (error) {
-    console.error('Error en crearInsumo:', error);
+    console.error("Error en crearInsumo:", error);
     throw error;
   }
 }
@@ -263,26 +263,26 @@ export async function crearInsumo(insumoData) {
  */
 export async function actualizarInsumo(insumoId, updateData) {
   try {
-    if (!insumoId) throw new Error('insumoId es requerido');
+    if (!insumoId) throw new Error("insumoId es requerido");
 
     // Sanitizar datos antes de actualizar
     const sanitized = sanitizarInsumoData(updateData);
 
     const { data, error } = await supabase
-      .from('inputs')
+      .from("inputs")
       .update(sanitized)
-      .eq('id', insumoId)
+      .eq("id", insumoId)
       .select()
       .single();
 
     if (error) {
-      console.error('Error al actualizar insumo:', error);
+      console.error("Error al actualizar insumo:", error);
       throw error;
     }
 
     return data;
   } catch (error) {
-    console.error('Error en actualizarInsumo:', error);
+    console.error("Error en actualizarInsumo:", error);
     throw error;
   }
 }
@@ -294,21 +294,21 @@ export async function actualizarInsumo(insumoId, updateData) {
  */
 export async function eliminarInsumo(insumoId) {
   try {
-    if (!insumoId) throw new Error('insumoId es requerido');
+    if (!insumoId) throw new Error("insumoId es requerido");
 
     // Soft delete: actualizar a inactivo (si existe columna active)
     // Si no existe, simplemente marcar como eliminado lógicamente
     const { error } = await supabase
-      .from('inputs')
+      .from("inputs")
       .update({ updated_at: new Date().toISOString() })
-      .eq('id', insumoId);
+      .eq("id", insumoId);
 
     if (error) {
-      console.error('Error al eliminar insumo:', error);
+      console.error("Error al eliminar insumo:", error);
       throw error;
     }
   } catch (error) {
-    console.error('Error en eliminarInsumo:', error);
+    console.error("Error en eliminarInsumo:", error);
     throw error;
   }
 }
@@ -320,7 +320,7 @@ export async function eliminarInsumo(insumoId) {
  */
 export async function obtenerInsumosProximosAVencer(firmId) {
   try {
-    if (!firmId) throw new Error('firmId es requerido');
+    if (!firmId) throw new Error("firmId es requerido");
 
     // Calcular fecha de 30 días desde hoy
     const hoy = new Date();
@@ -328,16 +328,16 @@ export async function obtenerInsumosProximosAVencer(firmId) {
     const dentro30dias = new Date(hoy.getTime() + 30 * 24 * 60 * 60 * 1000);
 
     const { data, count, error } = await supabase
-      .from('inputs')
-      .select('*', { count: 'exact' })
-      .eq('firm_id', firmId)
-      .not('expiration_date', 'is', null)
-      .gte('expiration_date', hace30dias.toISOString().split('T')[0])
-      .lte('expiration_date', dentro30dias.toISOString().split('T')[0])
-      .order('expiration_date', { ascending: true });
+      .from("inputs")
+      .select("*", { count: "exact" })
+      .eq("firm_id", firmId)
+      .not("expiration_date", "is", null)
+      .gte("expiration_date", hace30dias.toISOString().split("T")[0])
+      .lte("expiration_date", dentro30dias.toISOString().split("T")[0])
+      .order("expiration_date", { ascending: true });
 
     if (error) {
-      console.error('Error al obtener insumos próximos a vencer:', error);
+      console.error("Error al obtener insumos próximos a vencer:", error);
       throw error;
     }
 
@@ -346,7 +346,7 @@ export async function obtenerInsumosProximosAVencer(firmId) {
       count: count || 0,
     };
   } catch (error) {
-    console.error('Error en obtenerInsumosProximosAVencer:', error);
+    console.error("Error en obtenerInsumosProximosAVencer:", error);
     throw error;
   }
 }
@@ -358,20 +358,20 @@ export async function obtenerInsumosProximosAVencer(firmId) {
  */
 export async function obtenerInsumosVencidos(firmId) {
   try {
-    if (!firmId) throw new Error('firmId es requerido');
+    if (!firmId) throw new Error("firmId es requerido");
 
-    const hoy = new Date().toISOString().split('T')[0];
+    const hoy = new Date().toISOString().split("T")[0];
 
     const { data, count, error } = await supabase
-      .from('inputs')
-      .select('*', { count: 'exact' })
-      .eq('firm_id', firmId)
-      .not('expiration_date', 'is', null)
-      .lt('expiration_date', hoy)
-      .order('expiration_date', { ascending: true });
+      .from("inputs")
+      .select("*", { count: "exact" })
+      .eq("firm_id", firmId)
+      .not("expiration_date", "is", null)
+      .lt("expiration_date", hoy)
+      .order("expiration_date", { ascending: true });
 
     if (error) {
-      console.error('Error al obtener insumos vencidos:', error);
+      console.error("Error al obtener insumos vencidos:", error);
       throw error;
     }
 
@@ -380,7 +380,7 @@ export async function obtenerInsumosVencidos(firmId) {
       count: count || 0,
     };
   } catch (error) {
-    console.error('Error en obtenerInsumosVencidos:', error);
+    console.error("Error en obtenerInsumosVencidos:", error);
     throw error;
   }
 }
@@ -392,24 +392,24 @@ export async function obtenerInsumosVencidos(firmId) {
  */
 export async function obtenerInsumosStockMinimo(firmId) {
   try {
-    if (!firmId) throw new Error('firmId es requerido');
+    if (!firmId) throw new Error("firmId es requerido");
 
     // Usar RPC si está disponible, sino hacer en el cliente
     const { data, count, error } = await supabase
-      .from('inputs')
-      .select('*', { count: 'exact' })
-      .eq('firm_id', firmId)
-      .gt('min_stock_alert', 0)
-      .order('name', { ascending: true });
+      .from("inputs")
+      .select("*", { count: "exact" })
+      .eq("firm_id", firmId)
+      .gt("min_stock_alert", 0)
+      .order("name", { ascending: true });
 
     if (error) {
-      console.error('Error al obtener insumos con stock mínimo:', error);
+      console.error("Error al obtener insumos con stock mínimo:", error);
       throw error;
     }
 
     // Filtrar en cliente: comparar current_stock <= min_stock_alert
-    const filtrados = (data || []).filter(insumo =>
-      insumo.current_stock <= insumo.min_stock_alert
+    const filtrados = (data || []).filter(
+      (insumo) => insumo.current_stock <= insumo.min_stock_alert,
     );
 
     return {
@@ -417,7 +417,7 @@ export async function obtenerInsumosStockMinimo(firmId) {
       count: filtrados.length,
     };
   } catch (error) {
-    console.error('Error en obtenerInsumosStockMinimo:', error);
+    console.error("Error en obtenerInsumosStockMinimo:", error);
     throw error;
   }
 }
@@ -429,17 +429,17 @@ export async function obtenerInsumosStockMinimo(firmId) {
  */
 export async function obtenerInsumosSinStock(firmId) {
   try {
-    if (!firmId) throw new Error('firmId es requerido');
+    if (!firmId) throw new Error("firmId es requerido");
 
     const { data, count, error } = await supabase
-      .from('inputs')
-      .select('*', { count: 'exact' })
-      .eq('firm_id', firmId)
-      .eq('current_stock', 0)
-      .order('name', { ascending: true });
+      .from("inputs")
+      .select("*", { count: "exact" })
+      .eq("firm_id", firmId)
+      .eq("current_stock", 0)
+      .order("name", { ascending: true });
 
     if (error) {
-      console.error('Error al obtener insumos sin stock:', error);
+      console.error("Error al obtener insumos sin stock:", error);
       throw error;
     }
 
@@ -448,7 +448,7 @@ export async function obtenerInsumosSinStock(firmId) {
       count: count || 0,
     };
   } catch (error) {
-    console.error('Error en obtenerInsumosSinStock:', error);
+    console.error("Error en obtenerInsumosSinStock:", error);
     throw error;
   }
 }
@@ -460,49 +460,53 @@ export async function obtenerInsumosSinStock(firmId) {
  */
 export async function recalcularStockInsumo(insumoId) {
   try {
-    if (!insumoId) throw new Error('insumoId es requerido');
+    if (!insumoId) throw new Error("insumoId es requerido");
 
     // Obtener todos los movimientos del insumo
     const { data: movimientos, error: errMov } = await supabase
-      .from('input_movements')
-      .select('*')
-      .eq('input_id', insumoId);
+      .from("input_movements")
+      .select("*")
+      .eq("input_id", insumoId);
 
     if (errMov) {
-      console.error('Error al obtener movimientos:', errMov);
+      console.error("Error al obtener movimientos:", errMov);
       throw errMov;
     }
 
     // Calcular stock: sum(entry) - sum(exit + transfer + adjustment)
     let nuevoStock = 0;
-    (movimientos || []).forEach(mov => {
-      if (mov.type === 'entry') {
+    (movimientos || []).forEach((mov) => {
+      if (mov.type === "entry") {
         nuevoStock += mov.quantity;
-      } else if (mov.type === 'exit' || mov.type === 'transfer' || mov.type === 'adjustment') {
+      } else if (
+        mov.type === "exit" ||
+        mov.type === "transfer" ||
+        mov.type === "adjustment"
+      ) {
         nuevoStock -= mov.quantity;
       }
     });
 
     // Actualizar insumo con nuevo stock
     const { data, error } = await supabase
-      .from('inputs')
+      .from("inputs")
       .update({ current_stock: Math.max(0, nuevoStock) })
-      .eq('id', insumoId)
+      .eq("id", insumoId)
       .select()
       .single();
 
     if (error) {
-      console.error('Error al actualizar stock:', error);
+      console.error("Error al actualizar stock:", error);
       throw error;
     }
 
     return {
       insumoId,
       nuevoStock: Math.max(0, nuevoStock),
-      data
+      data,
     };
   } catch (error) {
-    console.error('Error en recalcularStockInsumo:', error);
+    console.error("Error en recalcularStockInsumo:", error);
     throw error;
   }
 }
@@ -514,22 +518,22 @@ export async function recalcularStockInsumo(insumoId) {
  */
 export async function obtenerStockValorizado(firmId) {
   try {
-    if (!firmId) throw new Error('firmId es requerido');
+    if (!firmId) throw new Error("firmId es requerido");
 
     const { data, error } = await supabase
-      .from('inputs')
-      .select('*')
-      .eq('firm_id', firmId);
+      .from("inputs")
+      .select("*")
+      .eq("firm_id", firmId);
 
     if (error) {
-      console.error('Error al obtener stock valorizado:', error);
+      console.error("Error al obtener stock valorizado:", error);
       throw error;
     }
 
     let totalValor = 0;
     const porCategoria = {};
 
-    (data || []).forEach(insumo => {
+    (data || []).forEach((insumo) => {
       const valor = (insumo.current_stock || 0) * (insumo.cost_per_unit || 0);
       totalValor += valor;
 
@@ -542,10 +546,10 @@ export async function obtenerStockValorizado(firmId) {
     return {
       total: totalValor,
       por_categoria: porCategoria,
-      fecha_calculo: new Date().toISOString()
+      fecha_calculo: new Date().toISOString(),
     };
   } catch (error) {
-    console.error('Error en obtenerStockValorizado:', error);
+    console.error("Error en obtenerStockValorizado:", error);
     throw error;
   }
 }
@@ -557,43 +561,46 @@ export async function obtenerStockValorizado(firmId) {
  */
 export async function obtenerEstadisticasInsumos(firmId) {
   try {
-    if (!firmId) throw new Error('firmId es requerido');
+    if (!firmId) throw new Error("firmId es requerido");
 
     const { data, error } = await supabase
-      .from('inputs')
-      .select('*')
-      .eq('firm_id', firmId);
+      .from("inputs")
+      .select("*")
+      .eq("firm_id", firmId);
 
     if (error) {
-      console.error('Error al obtener estadísticas:', error);
+      console.error("Error al obtener estadísticas:", error);
       throw error;
     }
 
     const insumos = data || [];
     const totalInsumos = insumos.length;
-    const totalStockUnidades = insumos.reduce((sum, i) => sum + (i.current_stock || 0), 0);
-    const insumosActivos = insumos.filter(i => i.current_stock > 0).length;
-    const insumosSinStock = insumos.filter(i => i.current_stock === 0).length;
+    const totalStockUnidades = insumos.reduce(
+      (sum, i) => sum + (i.current_stock || 0),
+      0,
+    );
+    const insumosActivos = insumos.filter((i) => i.current_stock > 0).length;
+    const insumosSinStock = insumos.filter((i) => i.current_stock === 0).length;
 
     // Contar próximos a vencer (dentro de 30 días)
     const hoy = new Date();
     const dentro30 = new Date(hoy.getTime() + 30 * 24 * 60 * 60 * 1000);
-    const proximosAvencer = insumos.filter(i => {
+    const proximosAvencer = insumos.filter((i) => {
       if (!i.expiration_date) return false;
       const fechaVenc = new Date(i.expiration_date);
       return fechaVenc > hoy && fechaVenc <= dentro30;
     }).length;
 
     // Contar vencidos
-    const vencidos = insumos.filter(i => {
+    const vencidos = insumos.filter((i) => {
       if (!i.expiration_date) return false;
       const fechaVenc = new Date(i.expiration_date);
       return fechaVenc < hoy;
     }).length;
 
     // Contar con stock mínimo activo
-    const conStockMinimo = insumos.filter(i =>
-      i.min_stock_alert > 0 && i.current_stock <= i.min_stock_alert
+    const conStockMinimo = insumos.filter(
+      (i) => i.min_stock_alert > 0 && i.current_stock <= i.min_stock_alert,
     ).length;
 
     return {
@@ -604,10 +611,10 @@ export async function obtenerEstadisticasInsumos(firmId) {
       proximosAvencer,
       vencidos,
       conStockMinimo,
-      fecha_calculo: new Date().toISOString()
+      fecha_calculo: new Date().toISOString(),
     };
   } catch (error) {
-    console.error('Error en obtenerEstadisticasInsumos:', error);
+    console.error("Error en obtenerEstadisticasInsumos:", error);
     throw error;
   }
 }
@@ -619,17 +626,17 @@ export async function obtenerEstadisticasInsumos(firmId) {
  */
 export async function obtenerInsumosDeposito(firmId) {
   try {
-    if (!firmId) throw new Error('firmId es requerido');
+    if (!firmId) throw new Error("firmId es requerido");
 
     const { data, count, error } = await supabase
-      .from('inputs')
-      .select('*', { count: 'exact' })
-      .eq('firm_id', firmId)
-      .eq('is_depot', true)
-      .order('name', { ascending: true });
+      .from("inputs")
+      .select("*", { count: "exact" })
+      .eq("firm_id", firmId)
+      .eq("is_depot", true)
+      .order("name", { ascending: true });
 
     if (error) {
-      console.error('Error al obtener insumos depósito:', error);
+      console.error("Error al obtener insumos depósito:", error);
       throw error;
     }
 
@@ -638,7 +645,7 @@ export async function obtenerInsumosDeposito(firmId) {
       count: count || 0,
     };
   } catch (error) {
-    console.error('Error en obtenerInsumosDeposito:', error);
+    console.error("Error en obtenerInsumosDeposito:", error);
     throw error;
   }
 }

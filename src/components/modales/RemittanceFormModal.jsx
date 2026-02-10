@@ -67,6 +67,9 @@ export default function RemittanceFormModal({
   const [formData, setFormData] = useState({
     remittance_number: "",
     remittance_date: new Date().toISOString().split("T")[0],
+    status: "pending",
+    purchase_order_id: "",
+    invoice_id: "",
     supplier_name: "",
     supplier_rut: "",
     transport_company: "",
@@ -83,6 +86,7 @@ export default function RemittanceFormModal({
   const [currentItem, setCurrentItem] = useState({
     item_description: "",
     input_id: null, // Nuevo: vinculación a insumo existente
+    category: "",
     unit: "kg",
     quantity_ordered: "",
     quantity_received: "",
@@ -90,6 +94,8 @@ export default function RemittanceFormModal({
 
   const [inputs, setInputs] = useState([]); // Nuevo: lista de insumos existentes
   const [searchInput, setSearchInput] = useState(""); // Nuevo: búsqueda
+  const [purchaseOrders, setPurchaseOrders] = useState([]);
+  const [invoices, setInvoices] = useState([]);
 
   const [depots, setDepots] = useState([]);
   const [depotLots, setDepotLots] = useState([]);
@@ -109,6 +115,8 @@ export default function RemittanceFormModal({
       loadDepots();
       loadPremisses();
       loadInputs(); // Nuevo: cargar insumos existentes
+      loadPurchaseOrders();
+      loadInvoices();
       // Pre-llenar predio si está seleccionado
       if (selectedPremise?.id) {
         setFormData((prev) => ({
@@ -240,6 +248,61 @@ export default function RemittanceFormModal({
   };
 
   /**
+   * Cargar órdenes de compra
+   */
+  const loadPurchaseOrders = async () => {
+    try {
+      const { data } = await supabase
+        .from("purchase_orders")
+        .select(
+          `
+            id,
+            order_number,
+            supplier_name,
+            supplier_rut,
+            delivery_address,
+            order_date,
+            status,
+            purchase_order_items (
+              id,
+              item_description,
+              quantity,
+              unit,
+              input_id
+            )
+          `,
+        )
+        .eq("firm_id", selectedFirm.id)
+        .order("order_date", { ascending: false });
+
+      setPurchaseOrders(data || []);
+    } catch (err) {
+      console.error("Error cargando órdenes de compra:", err);
+      toast.error("Error cargando órdenes de compra");
+    }
+  };
+
+  /**
+   * Cargar facturas de compra
+   */
+  const loadInvoices = async () => {
+    try {
+      const { data } = await supabase
+        .from("expenses")
+        .select(
+          "id, invoice_number, invoice_series, invoice_date, provider_name, purchase_order_id",
+        )
+        .eq("firm_id", selectedFirm.id)
+        .order("invoice_date", { ascending: false });
+
+      setInvoices(data || []);
+    } catch (err) {
+      console.error("Error cargando facturas:", err);
+      toast.error("Error cargando facturas");
+    }
+  };
+
+  /**
    * Manejar cambio en campos de formulario
    */
   const handleFormChange = (e) => {
@@ -253,6 +316,68 @@ export default function RemittanceFormModal({
         [name]: "",
       }));
     }
+  };
+
+  /**
+   * Seleccionar orden de compra y cargar sus ítems
+   */
+  const handlePurchaseOrderChange = (purchaseOrderId) => {
+    if (!purchaseOrderId) {
+      setFormData((prev) => ({
+        ...prev,
+        purchase_order_id: "",
+        invoice_id: "",
+        supplier_name: "",
+        supplier_rut: "",
+        delivery_address: "",
+      }));
+      if (errors.purchase_order_id || errors.invoice_id) {
+        setErrors((prev) => ({
+          ...prev,
+          purchase_order_id: "",
+          invoice_id: "",
+        }));
+      }
+      setItems([]);
+      return;
+    }
+
+    const po = purchaseOrders.find((p) => p.id === purchaseOrderId);
+    if (!po) return;
+
+    const inputCategoryMap = new Map(
+      inputs.map((input) => [input.id, input.category || ""]),
+    );
+
+    const itemsFromPO = (po.purchase_order_items || []).map((item) => ({
+      id: item.id,
+      purchase_order_item_id: item.id,
+      input_id: item.input_id || null,
+      item_description: item.item_description,
+      category: item.input_id ? inputCategoryMap.get(item.input_id) || "" : "",
+      unit: item.unit,
+      quantity_ordered: item.quantity,
+      quantity_received: item.quantity,
+    }));
+
+    setFormData((prev) => ({
+      ...prev,
+      purchase_order_id: po.id,
+      invoice_id: "",
+      supplier_name: po.supplier_name || "",
+      supplier_rut: po.supplier_rut || "",
+      delivery_address: po.delivery_address || "",
+    }));
+
+    if (errors.purchase_order_id || errors.invoice_id) {
+      setErrors((prev) => ({
+        ...prev,
+        purchase_order_id: "",
+        invoice_id: "",
+      }));
+    }
+
+    setItems(itemsFromPO);
   };
 
   /**
@@ -271,6 +396,7 @@ export default function RemittanceFormModal({
           ...prev,
           input_id: selectedInput.id,
           item_description: selectedInput.name,
+          category: selectedInput.category || "",
           unit: selectedInput.unit || "kg",
         };
         console.log(
@@ -354,6 +480,7 @@ export default function RemittanceFormModal({
     setCurrentItem({
       item_description: "",
       input_id: null, // Actualizado: limpiar input_id
+      category: "",
       unit: "kg",
       quantity_ordered: "",
       quantity_received: "",
@@ -421,6 +548,9 @@ export default function RemittanceFormModal({
       setFormData({
         remittance_number: "",
         remittance_date: new Date().toISOString().split("T")[0],
+        status: "pending",
+        purchase_order_id: "",
+        invoice_id: "",
         supplier_name: "",
         supplier_rut: "",
         transport_company: "",
@@ -444,6 +574,16 @@ export default function RemittanceFormModal({
   // ===========================
   // RENDER
   // ===========================
+
+  const categoryOptions = Array.from(
+    new Set(inputs.map((input) => input.category).filter(Boolean)),
+  );
+
+  const filteredInvoices = formData.purchase_order_id
+    ? invoices.filter(
+        (invoice) => invoice.purchase_order_id === formData.purchase_order_id,
+      )
+    : invoices;
 
   if (!isOpen) return null;
 
@@ -499,6 +639,106 @@ export default function RemittanceFormModal({
                     </p>
                   )}
                 </div>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label htmlFor="status">Estado *</Label>
+                  <Select
+                    value={formData.status}
+                    onValueChange={(value) => {
+                      setFormData((prev) => ({ ...prev, status: value }));
+                      if (errors.status) {
+                        setErrors((prev) => ({ ...prev, status: "" }));
+                      }
+                    }}
+                  >
+                    <SelectTrigger
+                      className={errors.status ? "border-red-500" : ""}
+                    >
+                      <SelectValue placeholder="Selecciona estado" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      <SelectItem value="pending">Pendiente</SelectItem>
+                      <SelectItem value="sent">Enviado</SelectItem>
+                      <SelectItem value="received">Recibido</SelectItem>
+                      <SelectItem value="partially_received">
+                        Parcial
+                      </SelectItem>
+                    </SelectContent>
+                  </Select>
+                  {errors.status && (
+                    <p className="text-xs text-red-500 mt-1">{errors.status}</p>
+                  )}
+                </div>
+
+                <div>
+                  <Label htmlFor="purchase_order_id">Nº de Orden (OC) *</Label>
+                  <Select
+                    value={formData.purchase_order_id}
+                    onValueChange={handlePurchaseOrderChange}
+                  >
+                    <SelectTrigger
+                      className={
+                        errors.purchase_order_id ? "border-red-500" : ""
+                      }
+                    >
+                      <SelectValue placeholder="Selecciona OC" />
+                    </SelectTrigger>
+                    <SelectContent>
+                      {purchaseOrders.map((po) => (
+                        <SelectItem key={po.id} value={po.id}>
+                          {po.order_number} - {po.supplier_name}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                  {errors.purchase_order_id && (
+                    <p className="text-xs text-red-500 mt-1">
+                      {errors.purchase_order_id}
+                    </p>
+                  )}
+                </div>
+              </div>
+
+              <div>
+                <Label htmlFor="invoice_id">Nº de Factura *</Label>
+                <Select
+                  value={formData.invoice_id}
+                  onValueChange={(value) => {
+                    setFormData((prev) => ({ ...prev, invoice_id: value }));
+                    if (errors.invoice_id) {
+                      setErrors((prev) => ({ ...prev, invoice_id: "" }));
+                    }
+                  }}
+                >
+                  <SelectTrigger
+                    className={errors.invoice_id ? "border-red-500" : ""}
+                  >
+                    <SelectValue placeholder="Selecciona factura" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {filteredInvoices.map((invoice) => (
+                      <SelectItem key={invoice.id} value={invoice.id}>
+                        {(invoice.invoice_series
+                          ? `${invoice.invoice_series}-`
+                          : "") + (invoice.invoice_number || "S/N")}{" "}
+                        - {invoice.provider_name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                {errors.invoice_id && (
+                  <p className="text-xs text-red-500 mt-1">
+                    {errors.invoice_id}
+                  </p>
+                )}
+                {formData.purchase_order_id &&
+                  filteredInvoices.length === 0 && (
+                    <p className="text-xs text-slate-500 mt-1">
+                      No hay facturas asociadas a esta OC.
+                    </p>
+                  )}
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -783,8 +1023,8 @@ export default function RemittanceFormModal({
                   )}
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
+                <div className="grid grid-cols-3 gap-4">
+                  <div className="col-span-2">
                     <Label htmlFor="item_description">Descripción *</Label>
                     <Input
                       id="item_description"
@@ -833,6 +1073,29 @@ export default function RemittanceFormModal({
 
                 <div className="grid grid-cols-2 gap-4">
                   <div>
+                    <Label htmlFor="category">Categoría *</Label>
+                    <Input
+                      id="category"
+                      name="category"
+                      value={currentItem.category}
+                      onChange={handleItemChange}
+                      placeholder="Ej: Fertilizantes"
+                      list="category-options"
+                      className={itemErrors.category ? "border-red-500" : ""}
+                    />
+                    <datalist id="category-options">
+                      {categoryOptions.map((category) => (
+                        <option key={category} value={category} />
+                      ))}
+                    </datalist>
+                    {itemErrors.category && (
+                      <p className="text-xs text-red-500 mt-1">
+                        {itemErrors.category}
+                      </p>
+                    )}
+                  </div>
+
+                  <div>
                     <Label htmlFor="quantity_ordered">
                       Cantidad Ordenada *
                     </Label>
@@ -854,9 +1117,13 @@ export default function RemittanceFormModal({
                       </p>
                     )}
                   </div>
+                </div>
 
+                <div className="grid grid-cols-2 gap-4">
                   <div>
-                    <Label htmlFor="quantity_received">Cantidad Recibida</Label>
+                    <Label htmlFor="quantity_received">
+                      Cantidad Entregada *
+                    </Label>
                     <Input
                       id="quantity_received"
                       name="quantity_received"
@@ -865,7 +1132,15 @@ export default function RemittanceFormModal({
                       value={currentItem.quantity_received}
                       onChange={handleItemChange}
                       placeholder="0"
+                      className={
+                        itemErrors.quantity_received ? "border-red-500" : ""
+                      }
                     />
+                    {itemErrors.quantity_received && (
+                      <p className="text-xs text-red-500 mt-1">
+                        {itemErrors.quantity_received}
+                      </p>
+                    )}
                   </div>
                 </div>
 
@@ -886,12 +1161,13 @@ export default function RemittanceFormModal({
                     <TableHeader>
                       <TableRow className="bg-slate-50">
                         <TableHead>Descripción</TableHead>
+                        <TableHead>Categoría</TableHead>
                         <TableHead className="text-center">Tipo</TableHead>
                         <TableHead className="text-right">
                           Cantidad Ordenada
                         </TableHead>
                         <TableHead className="text-right">
-                          Cantidad Recibida
+                          Cantidad Entregada
                         </TableHead>
                         <TableHead className="text-right">Unidad</TableHead>
                         <TableHead className="w-10"></TableHead>
@@ -901,6 +1177,7 @@ export default function RemittanceFormModal({
                       {items.map((item) => (
                         <TableRow key={item.id}>
                           <TableCell>{item.item_description}</TableCell>
+                          <TableCell>{item.category || "-"}</TableCell>
                           <TableCell className="text-center">
                             <span
                               className={`text-xs px-2 py-1 rounded-full ${item.input_id ? "bg-green-100 text-green-700" : "bg-blue-100 text-blue-700"}`}
@@ -952,10 +1229,14 @@ export default function RemittanceFormModal({
           {/* ===== SECCIÓN: NOTAS ===== */}
           <Card>
             <CardHeader>
-              <CardTitle className="text-lg">Notas Generales</CardTitle>
+              <CardTitle className="text-lg">
+                Comentarios y Observaciones
+              </CardTitle>
             </CardHeader>
             <CardContent>
-              <Label htmlFor="notes">Observaciones adicionales</Label>
+              <Label htmlFor="notes">
+                Comentarios / observaciones (opcional)
+              </Label>
               <Textarea
                 id="notes"
                 name="notes"

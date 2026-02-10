@@ -151,39 +151,141 @@ export async function cleanupUserCreatedData(firmId) {
       .eq('firm_id', firmId);
     const incomeIds = incomeData?.map(i => i.id) || [];
     
-    // Obtener IDs de trabajos
-    const { data: worksData } = await supabase
-      .from('works')
-      .select('id')
-      .eq('firm_id', firmId);
-    const workIds = worksData?.map(w => w.id) || [];
+    // Obtener IDs de trabajos agrícolas y ganaderos
+    const [agriculturalWorksResult, livestockWorksResult] = await Promise.all([
+      supabase.from('agricultural_works').select('id').eq('firm_id', firmId),
+      supabase.from('livestock_works').select('id').eq('firm_id', firmId)
+    ]);
+    const agriculturalWorkIds = agriculturalWorksResult.data?.map(w => w.id) || [];
+    const livestockWorkIds = livestockWorksResult.data?.map(w => w.id) || [];
+    const workIds = [...agriculturalWorkIds, ...livestockWorkIds];
 
     // PASO 1: Eliminar registros de auditoría que referencian estos datos
     console.log('  → Eliminando registros de auditoría relacionados...');
     
     // Eliminar registros de auditoría con lot_id
     if (lotIds.length > 0) {
-      const { error: auditLotsError } = await supabase
+      // Primero verificar cuántos registros hay
+      const { count: auditLotsCount } = await supabase
         .from('audit')
-        .delete()
+        .select('*', { count: 'exact', head: true })
         .in('lot_id', lotIds);
-      if (auditLotsError) {
-        console.warn('  ⚠️ Error eliminando audit de lotes:', auditLotsError.message);
-      } else {
-        console.log(`  ✓ Eliminados registros de auditoría de ${lotIds.length} lotes`);
+      
+      console.log(`  → Encontrados ${auditLotsCount || 0} registros de auditoría para ${lotIds.length} lotes`);
+      
+      // Intentar eliminación múltiple veces si es necesario (por si hay problemas de RLS)
+      let attempts = 0;
+      let remainingLotsAudit = auditLotsCount || 0;
+      const maxAttempts = 3;
+      
+      while (remainingLotsAudit > 0 && attempts < maxAttempts) {
+        attempts++;
+        console.log(`  → Intento ${attempts}/${maxAttempts} de eliminar registros de auditoría de lotes...`);
+        
+        const { error: auditLotsError } = await supabase
+          .from('audit')
+          .delete()
+          .in('lot_id', lotIds);
+        
+        if (auditLotsError) {
+          console.warn(`  ⚠️ Intento ${attempts} falló: ${auditLotsError.message}`);
+          if (attempts === maxAttempts) {
+            const errorMsg = `Error eliminando audit de lotes después de ${maxAttempts} intentos: ${auditLotsError.message}`;
+            report.errors.push(errorMsg);
+            console.error('  ❌', errorMsg);
+            report.success = false;
+            return report;
+          }
+          // Esperar un poco antes del siguiente intento
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+        
+        // Verificar cuántos quedan
+        const { count: newCount } = await supabase
+          .from('audit')
+          .select('*', { count: 'exact', head: true })
+          .in('lot_id', lotIds);
+        
+        remainingLotsAudit = newCount || 0;
+        
+        if (remainingLotsAudit === 0) {
+          console.log(`  ✓ Eliminados todos los registros de auditoría de ${lotIds.length} lotes`);
+          break;
+        } else {
+          console.log(`  ⚠️ Aún quedan ${remainingLotsAudit} registros. Reintentando...`);
+        }
+      }
+      
+      // Verificación final
+      if (remainingLotsAudit > 0) {
+        const errorMsg = `Aún quedan ${remainingLotsAudit} registros de auditoría referenciando lotes después de ${maxAttempts} intentos. No se puede continuar.`;
+        report.errors.push(errorMsg);
+        console.error('  ❌', errorMsg);
+        report.success = false;
+        return report;
       }
     }
     
     // Eliminar registros de auditoría con premise_id
     if (premiseIds.length > 0) {
-      const { error: auditPremisesError } = await supabase
+      // Primero verificar cuántos registros hay
+      const { count: auditPremisesCount } = await supabase
         .from('audit')
-        .delete()
+        .select('*', { count: 'exact', head: true })
         .in('premise_id', premiseIds);
-      if (auditPremisesError) {
-        console.warn('  ⚠️ Error eliminando audit de predios:', auditPremisesError.message);
-      } else {
-        console.log(`  ✓ Eliminados registros de auditoría de ${premiseIds.length} predios`);
+      
+      console.log(`  → Encontrados ${auditPremisesCount || 0} registros de auditoría para ${premiseIds.length} predios`);
+      
+      // Intentar eliminación múltiple veces si es necesario (por si hay problemas de RLS)
+      let attempts = 0;
+      let remainingPremisesAudit = auditPremisesCount || 0;
+      const maxAttempts = 3;
+      
+      while (remainingPremisesAudit > 0 && attempts < maxAttempts) {
+        attempts++;
+        console.log(`  → Intento ${attempts}/${maxAttempts} de eliminar registros de auditoría de predios...`);
+        
+        const { error: auditPremisesError } = await supabase
+          .from('audit')
+          .delete()
+          .in('premise_id', premiseIds);
+        
+        if (auditPremisesError) {
+          console.warn(`  ⚠️ Intento ${attempts} falló: ${auditPremisesError.message}`);
+          if (attempts === maxAttempts) {
+            const errorMsg = `Error eliminando audit de predios después de ${maxAttempts} intentos: ${auditPremisesError.message}`;
+            report.errors.push(errorMsg);
+            console.error('  ❌', errorMsg);
+            report.success = false;
+            return report;
+          }
+          // Esperar un poco antes del siguiente intento
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+        
+        // Verificar cuántos quedan
+        const { count: newCount } = await supabase
+          .from('audit')
+          .select('*', { count: 'exact', head: true })
+          .in('premise_id', premiseIds);
+        
+        remainingPremisesAudit = newCount || 0;
+        
+        if (remainingPremisesAudit === 0) {
+          console.log(`  ✓ Eliminados todos los registros de auditoría de ${premiseIds.length} predios`);
+          break;
+        } else {
+          console.log(`  ⚠️ Aún quedan ${remainingPremisesAudit} registros. Reintentando...`);
+        }
+      }
+      
+      // Verificación final
+      if (remainingPremisesAudit > 0) {
+        const errorMsg = `Aún quedan ${remainingPremisesAudit} registros de auditoría referenciando predios después de ${maxAttempts} intentos. No se puede continuar.`;
+        report.errors.push(errorMsg);
+        console.error('  ❌', errorMsg);
+        report.success = false;
+        return report;
       }
     }
     
@@ -228,8 +330,193 @@ export async function cleanupUserCreatedData(firmId) {
         console.log(`  ✓ Eliminados registros de auditoría de ${workIds.length} trabajos`);
       }
     }
+    
+    // Eliminar trabajos agrícolas
+    if (agriculturalWorkIds.length > 0) {
+      const { error: deleteAgriWorksError } = await supabase
+        .from('agricultural_works')
+        .delete()
+        .eq('firm_id', firmId);
+      if (deleteAgriWorksError) {
+        report.errors.push(`Error eliminando trabajos agrícolas: ${deleteAgriWorksError.message}`);
+        console.error('  ❌ Error eliminando trabajos agrícolas:', deleteAgriWorksError);
+      } else {
+        report.cleaned.agriculturalWorks = `✅ Eliminados ${agriculturalWorkIds.length} trabajos agrícolas`;
+        report.counts.agriculturalWorks = agriculturalWorkIds.length;
+        console.log(`  ✓ ${agriculturalWorkIds.length} trabajos agrícolas eliminados`);
+      }
+    }
+    
+    // Eliminar trabajos ganaderos
+    if (livestockWorkIds.length > 0) {
+      const { error: deleteLivestockWorksError } = await supabase
+        .from('livestock_works')
+        .delete()
+        .eq('firm_id', firmId);
+      if (deleteLivestockWorksError) {
+        report.errors.push(`Error eliminando trabajos ganaderos: ${deleteLivestockWorksError.message}`);
+        console.error('  ❌ Error eliminando trabajos ganaderos:', deleteLivestockWorksError);
+      } else {
+        report.cleaned.livestockWorks = `✅ Eliminados ${livestockWorkIds.length} trabajos ganaderos`;
+        report.counts.livestockWorks = livestockWorkIds.length;
+        console.log(`  ✓ ${livestockWorkIds.length} trabajos ganaderos eliminados`);
+      }
+    }
 
-    // PASO 2: Eliminar lotes (después de eliminar sus registros de auditoría)
+    // PASO 1.5: Actualizar animales que referencian estos lotes
+    console.log('  → Actualizando animales que referencian lotes...');
+    if (lotIds.length > 0) {
+      // Primero verificar cuántos animales hay
+      const { count: animalsCount, error: animalsCountError } = await supabase
+        .from('animals')
+        .select('*', { count: 'exact', head: true })
+        .in('current_lot_id', lotIds);
+      
+      if (animalsCountError) {
+        const errorMsg = `Error contando animales: ${animalsCountError.message}`;
+        console.error('  ❌', errorMsg);
+        report.errors.push(errorMsg);
+        report.success = false;
+        return report;
+      } else {
+        console.log(`  → Encontrados ${animalsCount || 0} animales referenciando estos lotes`);
+      }
+      
+      if (animalsCount > 0) {
+        // Obtener los IDs de los animales para actualizarlos uno por uno si es necesario
+        const { data: animalsData, error: animalsFetchError } = await supabase
+          .from('animals')
+          .select('id, current_lot_id')
+          .in('current_lot_id', lotIds);
+        
+        if (animalsFetchError) {
+          const errorMsg = `Error obteniendo animales: ${animalsFetchError.message}`;
+          console.error('  ❌', errorMsg);
+          report.errors.push(errorMsg);
+          report.success = false;
+          return report;
+        }
+        
+        const animalIds = animalsData?.map(a => a.id) || [];
+        console.log(`  → Obtenidos ${animalIds.length} IDs de animales para actualizar`);
+        
+        // Intentar actualización masiva primero
+        let attempts = 0;
+        let remainingAnimals = animalsCount;
+        const maxAttempts = 3;
+        let updateSuccess = false;
+        
+        while (remainingAnimals > 0 && attempts < maxAttempts && !updateSuccess) {
+          attempts++;
+          console.log(`  → Intento ${attempts}/${maxAttempts} de actualizar animales (masivo)...`);
+          
+          const { error: updateAnimalsError, data: updateResult } = await supabase
+            .from('animals')
+            .update({ current_lot_id: null })
+            .in('current_lot_id', lotIds)
+            .select('id');
+          
+          if (updateAnimalsError) {
+            console.error(`  ❌ Intento ${attempts} falló:`, updateAnimalsError);
+            console.error(`     Código: ${updateAnimalsError.code}, Mensaje: ${updateAnimalsError.message}`);
+            if (attempts === maxAttempts) {
+              // Si falla la actualización masiva, intentar uno por uno
+              console.log('  → Intentando actualizar animales uno por uno...');
+              let successCount = 0;
+              let failCount = 0;
+              
+              for (const animalId of animalIds) {
+                const { error: singleUpdateError } = await supabase
+                  .from('animals')
+                  .update({ current_lot_id: null })
+                  .eq('id', animalId);
+                
+                if (singleUpdateError) {
+                  console.error(`  ❌ Error actualizando animal ${animalId}:`, singleUpdateError.message);
+                  failCount++;
+                } else {
+                  successCount++;
+                }
+              }
+              
+              console.log(`  → Actualización individual: ${successCount} exitosos, ${failCount} fallidos`);
+              
+              // Verificar cuántos quedan
+              const { count: finalCount } = await supabase
+                .from('animals')
+                .select('*', { count: 'exact', head: true })
+                .in('current_lot_id', lotIds);
+              
+              remainingAnimals = finalCount || 0;
+              
+              if (remainingAnimals > 0) {
+                const errorMsg = `No se pudieron actualizar ${remainingAnimals} animales. Posible bloqueo por políticas RLS.`;
+                report.errors.push(errorMsg);
+                console.error('  ❌', errorMsg);
+                report.success = false;
+                return report;
+              } else {
+                updateSuccess = true;
+                console.log(`  ✓ Todos los animales actualizados (método individual)`);
+              }
+            } else {
+              await new Promise(resolve => setTimeout(resolve, 500));
+            }
+          } else {
+            // Verificar cuántos quedan
+            const { count: newCount } = await supabase
+              .from('animals')
+              .select('*', { count: 'exact', head: true })
+              .in('current_lot_id', lotIds);
+            
+            remainingAnimals = newCount || 0;
+            
+            if (remainingAnimals === 0) {
+              console.log(`  ✓ Todos los animales actualizados (current_lot_id = null)`);
+              updateSuccess = true;
+              break;
+            } else {
+              console.log(`  ⚠️ Aún quedan ${remainingAnimals} animales. Reintentando...`);
+            }
+          }
+        }
+        
+        // Verificación final
+        if (!updateSuccess && remainingAnimals > 0) {
+          const errorMsg = `Aún quedan ${remainingAnimals} animales referenciando lotes después de ${maxAttempts} intentos masivos y actualización individual. No se puede continuar. Posible problema con políticas RLS.`;
+          report.errors.push(errorMsg);
+          console.error('  ❌', errorMsg);
+          report.success = false;
+          return report;
+        }
+      } else {
+        console.log('  ✓ Sin animales que referencien estos lotes');
+      }
+    }
+    
+    // PASO 2: Verificación final antes de eliminar lotes
+    console.log('  → Verificación final antes de eliminar lotes...');
+    if (lotIds.length > 0) {
+      // Verificar una última vez que no queden animales referenciando estos lotes
+      const { count: finalAnimalsCheck, error: finalCheckError } = await supabase
+        .from('animals')
+        .select('*', { count: 'exact', head: true })
+        .in('current_lot_id', lotIds);
+      
+      if (finalCheckError) {
+        console.warn('  ⚠️ Error en verificación final de animales:', finalCheckError.message);
+      } else if (finalAnimalsCheck > 0) {
+        const errorMsg = `CRÍTICO: Aún quedan ${finalAnimalsCheck} animales referenciando lotes. No se puede eliminar lotes.`;
+        report.errors.push(errorMsg);
+        console.error('  ❌', errorMsg);
+        report.success = false;
+        return report;
+      } else {
+        console.log('  ✓ Verificación final: No hay animales referenciando estos lotes');
+      }
+    }
+    
+    // PASO 2.1: Eliminar lotes (después de todas las verificaciones)
     console.log('  → Eliminando lotes...');
     if (lotIds.length > 0) {
       const { error: deleteLotsError } = await supabase
@@ -313,26 +600,8 @@ export async function cleanupUserCreatedData(firmId) {
       console.log('  ✓ Sin ingresos para eliminar');
     }
 
-    // PASO 6: Eliminar trabajos
-    console.log('  → Eliminando trabajos...');
-    if (workIds.length > 0) {
-      const { error: deleteWorksError } = await supabase
-        .from('works')
-        .delete()
-        .eq('firm_id', firmId);
-
-      if (deleteWorksError) {
-        report.errors.push(`Error eliminando trabajos: ${deleteWorksError.message}`);
-        console.error('  ❌ Error eliminando trabajos:', deleteWorksError);
-      } else {
-        report.cleaned.works = `✅ Eliminados ${workIds.length} trabajos`;
-        report.counts.works = workIds.length;
-        console.log(`  ✓ ${workIds.length} trabajos eliminados`);
-      }
-    } else {
-      report.counts.works = 0;
-      console.log('  ✓ Sin trabajos para eliminar');
-    }
+    // PASO 6: Los trabajos ya se eliminaron arriba (agricultural_works y livestock_works)
+    report.counts.works = workIds.length;
 
     if (report.errors.length > 0) {
       report.success = false;
@@ -513,83 +782,218 @@ export async function deleteFirmWithCleanup({
       return result;
     }
 
-    // Si se fuerza la eliminación, eliminar primero los datos relacionados
-    if (blockers.length > 0 && forceDelete) {
-      console.log(`⚠️ Eliminación forzada: eliminando ${blockers.length} tipos de datos relacionados...`);
-      const cascadeResult = await cleanupUserCreatedData(firmId);
-      result.cascadeDeleted = cascadeResult.counts;
+    // PASO 2.5: Si se fuerza la eliminación, intentar usar función RPC PRIMERO
+    // La función RPC tiene permisos elevados y puede manejar todo sin problemas de RLS
+    let rpcWasSuccessful = false;
+    
+    // Intentar RPC si forceDelete es true (incluso si no hay bloqueadores, la RPC es más eficiente)
+    if (forceDelete) {
+      console.log(`⚠️ Eliminación forzada detectada. Intentando usar función RPC primero...`);
+      console.log(`  → Blockers encontrados: ${blockers.length}`);
+      console.log(`  → Firm ID: ${firmId}`);
       
-      if (!cascadeResult.success) {
-        result.message = `Error eliminando datos relacionados: ${cascadeResult.errors.join('; ')}`;
-        result.cleaned = cascadeResult.cleaned;
-        return result;
+      let rpcSuccess = false;
+      try {
+        console.log('  → Intentando eliminar con RPC (modo seguro con permisos elevados)...');
+        console.log('  → Llamando: delete_firm_with_cleanup');
+
+        // Promise con timeout explícito (15 segundos para RPC completa)
+        const rpcPromise = supabase
+          .rpc('delete_firm_with_cleanup', { firm_id: firmId });
+
+        const timeoutPromise = new Promise((_, reject) =>
+          setTimeout(() => reject(new Error('RPC timeout after 15s')), 15000)
+        );
+
+        try {
+          const { data: rpcResult, error: rpcError } = await Promise.race([
+            rpcPromise,
+            timeoutPromise
+          ]);
+
+          console.log('  → Respuesta RPC recibida');
+          console.log('  → RPC Result:', rpcResult);
+          console.log('  → RPC Error:', rpcError);
+
+          if (rpcError) {
+            console.error('  ❌ RPC error completo:', JSON.stringify(rpcError, null, 2));
+            console.error('  ❌ Código de error:', rpcError.code);
+            console.error('  ❌ Mensaje:', rpcError.message);
+            console.error('  ❌ Detalles:', rpcError.details);
+            console.log('  ⚠️ RPC falló, continuando con método manual...');
+            rpcSuccess = false;
+          } else if (rpcResult === null || rpcResult === undefined) {
+            console.warn('  ⚠️ RPC retornó null/undefined. Posible problema con la función.');
+            console.log('  ⚠️ RPC no disponible, continuando con método manual...');
+            rpcSuccess = false;
+          } else if (rpcResult && !rpcResult.success) {
+            console.warn('  ⚠️ RPC reportó error:', rpcResult.message);
+            console.warn('  ⚠️ Resultado completo:', JSON.stringify(rpcResult, null, 2));
+            console.log('  ⚠️ RPC falló, continuando con método manual...');
+            rpcSuccess = false;
+          } else if (rpcResult && rpcResult.success) {
+            console.log('  ✓ Firma eliminada exitosamente con RPC');
+            console.log('  ✓ Resultado RPC:', JSON.stringify(rpcResult, null, 2));
+            result.success = true;
+            result.message = `Firma "${firmName}" eliminada exitosamente`;
+            // Extraer conteos de datos eliminados del resultado RPC si están disponibles
+            if (rpcResult.deleted_counts) {
+              result.cascadeDeleted = rpcResult.deleted_counts;
+            }
+            rpcWasSuccessful = true;
+            return result;
+          } else {
+            console.warn('  ⚠️ Respuesta RPC inesperada:', rpcResult);
+            console.log('  ⚠️ Continuando con método manual...');
+            rpcSuccess = false;
+          }
+        } catch (raceError) {
+          // Timeout o error en Promise.race
+          console.error(`  ❌ RPC no respondió (timeout o no existe):`, raceError);
+          console.error(`  ❌ Error completo:`, JSON.stringify(raceError, Object.getOwnPropertyNames(raceError), 2));
+          console.log('  ⚠️ RPC no disponible, continuando con método manual...');
+          rpcSuccess = false;
+        }
+      } catch (rpcException) {
+        console.error('  ❌ Excepción en RPC:', rpcException);
+        console.error('  ❌ Stack trace:', rpcException.stack);
+        console.log('  ⚠️ RPC no disponible, continuando con método manual...');
+        rpcSuccess = false;
       }
+
+      // Si la RPC falló o no está disponible, continuar con método manual
+      if (!rpcSuccess) {
+        console.log(`⚠️ RPC no fue exitosa. Continuando con eliminación manual...`);
+        console.log(`⚠️ Esto puede fallar por políticas RLS. Se recomienda verificar la función RPC en Supabase.`);
+        
+        // Solo continuar con método manual si hay bloqueadores
+        if (blockers.length === 0) {
+          console.log('  ⚠️ No hay bloqueadores, pero RPC falló. Intentando DELETE directo...');
+          // Si no hay bloqueadores, intentar DELETE directo
+          const { error: directDeleteError } = await supabase
+            .from('firms')
+            .delete()
+            .eq('id', firmId);
+          
+          if (!directDeleteError) {
+            result.success = true;
+            result.message = `Firma "${firmName}" eliminada exitosamente (DELETE directo)`;
+            return result;
+          } else {
+            result.message = `Error eliminando firma: ${directDeleteError.message}. La función RPC debería haberse usado.`;
+            return result;
+          }
+        }
+        
+        console.log(`⚠️ Continuando con eliminación manual de ${blockers.length} tipos de datos relacionados...`);
+        
+        // PASO 2.5.1: Eliminar TODOS los registros de auditoría de la firma PRIMERO
+        // Esto es crítico para evitar violaciones de claves foráneas al eliminar lotes y predios
+        console.log('  → Eliminando TODOS los registros de auditoría de la firma primero...');
+        
+        // Verificar cuántos registros hay primero
+        const { count: totalAuditCount } = await supabase
+          .from('audit')
+          .select('*', { count: 'exact', head: true })
+          .eq('firm_id', firmId);
+        
+        console.log(`  → Encontrados ${totalAuditCount || 0} registros de auditoría para la firma`);
+        
+        if (totalAuditCount > 0) {
+          // Intentar eliminación con reintentos
+          let attempts = 0;
+          let remainingAudit = totalAuditCount;
+          const maxAttempts = 3;
+          
+          while (remainingAudit > 0 && attempts < maxAttempts) {
+            attempts++;
+            console.log(`  → Intento ${attempts}/${maxAttempts} de eliminar todos los registros de auditoría...`);
+            
+            const { error: auditDeleteError } = await supabase
+              .from('audit')
+              .delete()
+              .eq('firm_id', firmId);
+            
+            if (auditDeleteError) {
+              console.warn(`  ⚠️ Intento ${attempts} falló: ${auditDeleteError.message}`);
+              if (attempts < maxAttempts) {
+                await new Promise(resolve => setTimeout(resolve, 500));
+              }
+            }
+            
+            // Verificar cuántos quedan
+            const { count: newCount } = await supabase
+              .from('audit')
+              .select('*', { count: 'exact', head: true })
+              .eq('firm_id', firmId);
+            
+            remainingAudit = newCount || 0;
+            
+            if (remainingAudit === 0) {
+              console.log(`  ✓ Eliminados todos los registros de auditoría de la firma`);
+              break;
+            } else {
+              console.log(`  ⚠️ Aún quedan ${remainingAudit} registros. Reintentando...`);
+            }
+          }
+          
+          if (remainingAudit > 0) {
+            console.warn(`  ⚠️ No se pudieron eliminar todos los registros de auditoría (quedan ${remainingAudit}). Se intentará eliminar específicamente en el siguiente paso.`);
+          }
+        } else {
+          console.log(`  ✓ Sin registros de auditoría para eliminar`);
+        }
+
+        // Eliminar datos relacionados manualmente
+        const cascadeResult = await cleanupUserCreatedData(firmId);
+        result.cascadeDeleted = cascadeResult.counts;
+        
+        if (!cascadeResult.success) {
+          result.message = `Error eliminando datos relacionados: ${cascadeResult.errors.join('; ')}`;
+          result.cleaned = cascadeResult.cleaned;
+          return result;
+        }
+        
+        // Agregar los datos eliminados al reporte de limpieza
+        Object.assign(result.cleaned, cascadeResult.cleaned);
+        console.log(`✅ Datos relacionados eliminados:`, cascadeResult.counts);
+      }
+    } else if (!forceDelete) {
+      // Si no se fuerza la eliminación, solo limpiar auditoría básica
+      console.log('  → Limpiando registros de auditoría básicos...');
+      const { error: auditDeleteError } = await supabase
+        .from('audit')
+        .delete()
+        .eq('firm_id', firmId);
       
-      // Agregar los datos eliminados al reporte de limpieza
-      Object.assign(result.cleaned, cascadeResult.cleaned);
-      console.log(`✅ Datos relacionados eliminados:`, cascadeResult.counts);
+      if (auditDeleteError) {
+        console.warn(`  ⚠️ Error limpiando audit: ${auditDeleteError.message}`);
+      } else {
+        console.log(`  ✓ Registros de auditoría limpiados`);
+      }
     }
 
-    // PASO 3: Limpiar dependencias auto-creadas
-    const cleanup = await cleanupFirmDependencies(firmId);
-    result.cleaned = cleanup.cleaned;
+    // PASO 3: Limpiar dependencias auto-creadas (ya eliminamos audit arriba, pero limpiamos otras)
+    // Solo si no se usó RPC (porque la RPC ya lo hace todo)
+    let cleanup = { cleaned: {}, success: true, errors: [] };
+    if (!(blockers.length > 0 && forceDelete)) {
+      cleanup = await cleanupFirmDependencies(firmId);
+      result.cleaned = cleanup.cleaned;
 
-    if (!cleanup.success && cleanup.errors.length > 0) {
-      result.message = `Error limpiando dependencias: ${cleanup.errors.join('; ')}`;
-      return result;
+      if (!cleanup.success && cleanup.errors.length > 0) {
+        result.message = `Error limpiando dependencias: ${cleanup.errors.join('; ')}`;
+        return result;
+      }
     }
 
     // PASO 4: Eliminar la firma
-    // Intentar primero con función RPC (si está disponible después del FIX)
-    // Si no está disponible o timeout, intentar DELETE directo
+    // Solo si no se usó RPC exitosamente (la RPC ya eliminó la firma)
+    // Si llegamos aquí, significa que la RPC falló o no se intentó, así que usar DELETE directo
     let deleteError = null;
-    let rpcSuccess = false;
-
-    try {
-      console.log('  → Intentando eliminar con RPC (modo seguro)...');
-
-      // Promise con timeout explícito (5 segundos)
-      const rpcPromise = supabase
-        .rpc('delete_firm_with_cleanup', { firm_id: firmId });
-
-      const timeoutPromise = new Promise((_, reject) =>
-        setTimeout(() => reject(new Error('RPC timeout after 5s')), 5000)
-      );
-
-      try {
-        const { data: rpcResult, error: rpcError } = await Promise.race([
-          rpcPromise,
-          timeoutPromise
-        ]);
-
-        if (rpcError) {
-          console.warn('  ⚠️ RPC error:', rpcError.message);
-          console.log('  ⚠️ Fallback: Intentando DELETE directo...');
-          rpcSuccess = false;
-        } else if (rpcResult && !rpcResult.success) {
-          console.warn('  ⚠️ RPC reportó error:', rpcResult.message);
-          console.log('  ⚠️ Fallback: Intentando DELETE directo...');
-          rpcSuccess = false;
-        } else if (rpcResult && rpcResult.success) {
-          console.log('  ✓ Firma eliminada exitosamente con RPC');
-          result.success = true;
-          result.message = `Firma "${firmName}" eliminada exitosamente`;
-          return result;
-        }
-      } catch (raceError) {
-        // Timeout o error en Promise.race
-        console.warn(`  ⚠️ RPC no respondió (timeout o no existe): ${raceError.message}`);
-        console.log('  ⚠️ Fallback: Intentando DELETE directo...');
-        rpcSuccess = false;
-      }
-    } catch (rpcException) {
-      console.warn('  ⚠️ Excepción en RPC:', rpcException.message);
-      console.log('  ⚠️ Fallback: Intentando DELETE directo...');
-      rpcSuccess = false;
-    }
-
-    // Si RPC no fue exitoso, intentar DELETE directo
-    if (!rpcSuccess) {
+    
+    // Solo intentar DELETE directo si la RPC no fue exitosa
+    // Si forceDelete es true pero la RPC falló, ya ejecutamos cleanupUserCreatedData arriba
+    if (!rpcWasSuccessful) {
       try {
         console.log('  → Ejecutando DELETE directo en tabla firms...');
         const { error: directDeleteError } = await supabase
@@ -615,7 +1019,7 @@ export async function deleteFirmWithCleanup({
               metadata: {
                 nombre: firmName,
                 method: 'DELETE_DIRECTO',
-                dependenciesCleared: Object.keys(cleanup.cleaned)
+                dependenciesCleared: Object.keys(cleanup.cleaned || {})
               }
             });
           } catch (auditError) {

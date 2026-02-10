@@ -250,7 +250,7 @@ function AppContent() {
           />
         );
       case 'purchase-orders':
-        return <PurchaseOrders firmId={selectedFirm?.id} />;
+        return <PurchaseOrders firmId={selectedFirm?.id} premiseId={selectedPremise?.id} />;
       case 'remittances':
         return (
           <RemittancesManager

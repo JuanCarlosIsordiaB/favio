@@ -1,60 +1,87 @@
-import { useState, useEffect } from 'react';
-import { Button } from '../ui/button';
-import { Input } from '../ui/input';
+import { useState, useEffect } from "react";
+import { Button } from "../ui/button";
+import { Input } from "../ui/input";
 import {
   Select,
   SelectContent,
   SelectItem,
   SelectTrigger,
-  SelectValue
-} from '../ui/select';
+  SelectValue,
+} from "../ui/select";
 import {
   Table,
   TableBody,
   TableCell,
   TableHead,
   TableHeader,
-  TableRow
-} from '../ui/table';
-import { usePaymentOrders } from '../../hooks/usePaymentOrders';
-import { Badge } from '../ui/badge';
-import { AlertCircle, Eye, Plus, CheckCircle2, PlayCircle, Trash2 } from 'lucide-react';
-import { useAuth } from '../../contexts/AuthContext';
+  TableRow,
+} from "../ui/table";
+import { usePaymentOrders } from "../../hooks/usePaymentOrders";
+import { Badge } from "../ui/badge";
+import {
+  AlertCircle,
+  Eye,
+  Plus,
+  CheckCircle2,
+  PlayCircle,
+  Trash2,
+} from "lucide-react";
+import { useAuth } from "../../contexts/AuthContext";
 
 const statusBadgeColors = {
-  DRAFT: 'bg-gray-200 text-gray-800',
-  PENDING_APPROVAL: 'bg-yellow-200 text-yellow-800',
-  APPROVED: 'bg-blue-200 text-blue-800',
-  EXECUTED: 'bg-green-700 text-white',
-  REJECTED: 'bg-red-200 text-red-800',
-  CANCELLED: 'bg-gray-500 text-white'
+  DRAFT: "bg-gray-200 text-gray-800",
+  PENDING_APPROVAL: "bg-yellow-200 text-yellow-800",
+  APPROVED: "bg-blue-200 text-blue-800",
+  EXECUTED: "bg-green-700 text-white",
+  REJECTED: "bg-red-200 text-red-800",
+  CANCELLED: "bg-gray-500 text-white",
 };
 
 const statusLabels = {
-  DRAFT: 'Borrador',
-  PENDING_APPROVAL: 'Pendiente de Aprobación',
-  APPROVED: 'Aprobada',
-  EXECUTED: 'Ejecutada',
-  REJECTED: 'Rechazada',
-  CANCELLED: 'Cancelada'
+  DRAFT: "Borrador",
+  PENDING_APPROVAL: "Pendiente de Aprobación",
+  APPROVED: "Pendiente de Pago",
+  EXECUTED: "Pagada",
+  REJECTED: "Rechazada",
+  CANCELLED: "Cancelada",
 };
 
 /**
  * Vista de lista de órdenes de pago
  * @component
  */
-export function PaymentOrderListView({ firmId, onAdd = () => {}, onExecuteOrder = () => {} }) {
+export function PaymentOrderListView({
+  firmId,
+  onAdd = () => {},
+  onExecuteOrder = () => {},
+}) {
   const { user } = useAuth();
-  const { orders, loading, error, loadOrders, approveOrder, rejectOrder, executeOrder, cancelOrder } = usePaymentOrders();
+  const {
+    orders,
+    loading,
+    error,
+    loadOrders,
+    approveOrder,
+    rejectOrder,
+    executeOrder,
+    cancelOrder,
+  } = usePaymentOrders();
 
   const [filters, setFilters] = useState({
-    status: '',
-    searchTerm: '',
-    dateFrom: '',
-    dateTo: ''
+    status: "",
+    searchTerm: "",
+    dateFrom: "",
+    dateTo: "",
   });
 
-  const statuses = ['DRAFT', 'PENDING_APPROVAL', 'APPROVED', 'EXECUTED', 'REJECTED', 'CANCELLED'];
+  const statuses = [
+    "DRAFT",
+    "PENDING_APPROVAL",
+    "APPROVED",
+    "EXECUTED",
+    "REJECTED",
+    "CANCELLED",
+  ];
 
   /**
    * Cargar órdenes al montar o cambiar firma
@@ -81,12 +108,12 @@ export function PaymentOrderListView({ firmId, onAdd = () => {}, onExecuteOrder 
   /**
    * Filtrar por búsqueda local
    */
-  const filteredOrders = orders.filter(order => {
+  const filteredOrders = orders.filter((order) => {
     if (!filters.searchTerm) return true;
     const searchLower = filters.searchTerm.toLowerCase();
     return (
-      (order.order_number || '').toLowerCase().includes(searchLower) ||
-      (order.beneficiary_name || '').toLowerCase().includes(searchLower)
+      (order.order_number || "").toLowerCase().includes(searchLower) ||
+      (order.beneficiary_name || "").toLowerCase().includes(searchLower)
     );
   });
 
@@ -103,7 +130,9 @@ export function PaymentOrderListView({ firmId, onAdd = () => {}, onExecuteOrder 
   };
 
   const handleReject = async (order) => {
-    const reason = prompt(`¿Motivo del rechazo de orden #${order.order_number}?`);
+    const reason = prompt(
+      `¿Motivo del rechazo de orden #${order.order_number}?`,
+    );
     if (!reason) return;
 
     try {
@@ -114,7 +143,11 @@ export function PaymentOrderListView({ firmId, onAdd = () => {}, onExecuteOrder 
   };
 
   const handleExecute = async (order) => {
-    if (!window.confirm(`¿Ejecutar orden de pago #${order.order_number}?\n\nEsta acción es irreversible.`)) {
+    if (
+      !window.confirm(
+        `¿Ejecutar orden de pago #${order.order_number}?\n\nEsta acción es irreversible.`,
+      )
+    ) {
       return;
     }
 
@@ -127,7 +160,9 @@ export function PaymentOrderListView({ firmId, onAdd = () => {}, onExecuteOrder 
   };
 
   const handleCancel = async (order) => {
-    const reason = prompt(`¿Motivo de cancelación de orden #${order.order_number}?`);
+    const reason = prompt(
+      `¿Motivo de cancelación de orden #${order.order_number}?`,
+    );
     if (!reason) return;
 
     try {
@@ -168,16 +203,23 @@ export function PaymentOrderListView({ firmId, onAdd = () => {}, onExecuteOrder 
         <Input
           placeholder="Buscar por Nº Orden o Beneficiario..."
           value={filters.searchTerm}
-          onChange={(e) => setFilters(prev => ({ ...prev, searchTerm: e.target.value }))}
+          onChange={(e) =>
+            setFilters((prev) => ({ ...prev, searchTerm: e.target.value }))
+          }
         />
 
-        <Select value={filters.status || 'all'} onValueChange={(value) => handleFilterChange('status', value === 'all' ? '' : value)}>
+        <Select
+          value={filters.status || "all"}
+          onValueChange={(value) =>
+            handleFilterChange("status", value === "all" ? "" : value)
+          }
+        >
           <SelectTrigger>
             <SelectValue placeholder="Estado" />
           </SelectTrigger>
           <SelectContent>
             <SelectItem value="all">Todos los estados</SelectItem>
-            {statuses.map(status => (
+            {statuses.map((status) => (
               <SelectItem key={status} value={status}>
                 {statusLabels[status]}
               </SelectItem>
@@ -188,14 +230,14 @@ export function PaymentOrderListView({ firmId, onAdd = () => {}, onExecuteOrder 
         <Input
           type="date"
           value={filters.dateFrom}
-          onChange={(e) => handleFilterChange('dateFrom', e.target.value)}
+          onChange={(e) => handleFilterChange("dateFrom", e.target.value)}
           placeholder="Desde"
         />
 
         <Input
           type="date"
           value={filters.dateTo}
-          onChange={(e) => handleFilterChange('dateTo', e.target.value)}
+          onChange={(e) => handleFilterChange("dateTo", e.target.value)}
           placeholder="Hasta"
         />
       </div>
@@ -216,8 +258,11 @@ export function PaymentOrderListView({ firmId, onAdd = () => {}, onExecuteOrder 
               <TableHead>Estado</TableHead>
               <TableHead>Nº Orden</TableHead>
               <TableHead>Fecha Orden</TableHead>
+              <TableHead>Fecha Planificada</TableHead>
               <TableHead>Beneficiario</TableHead>
               <TableHead>Método de Pago</TableHead>
+              <TableHead>OC</TableHead>
+              <TableHead>Factura</TableHead>
               <TableHead className="text-right">Monto</TableHead>
               <TableHead>Cuenta Origen</TableHead>
               <TableHead>Fecha Pago</TableHead>
@@ -227,39 +272,61 @@ export function PaymentOrderListView({ firmId, onAdd = () => {}, onExecuteOrder 
           <TableBody>
             {loading ? (
               <TableRow>
-                <TableCell colSpan="9" className="text-center py-8 text-gray-500">
+                <TableCell
+                  colSpan="12"
+                  className="text-center py-8 text-gray-500"
+                >
                   Cargando órdenes de pago...
                 </TableCell>
               </TableRow>
             ) : filteredOrders.length === 0 ? (
               <TableRow>
-                <TableCell colSpan="9" className="text-center py-8 text-gray-500">
+                <TableCell
+                  colSpan="12"
+                  className="text-center py-8 text-gray-500"
+                >
                   No hay órdenes de pago registradas
                 </TableCell>
               </TableRow>
             ) : (
-              filteredOrders.map(order => (
+              filteredOrders.map((order) => (
                 <TableRow key={order.id} className="hover:bg-gray-50">
                   <TableCell>
                     <Badge className={statusBadgeColors[order.status]}>
                       {statusLabels[order.status]}
                     </Badge>
                   </TableCell>
-                  <TableCell className="font-medium">#{order.order_number}</TableCell>
+                  <TableCell className="font-medium">
+                    #{order.order_number}
+                  </TableCell>
                   <TableCell>{order.order_date}</TableCell>
+                  <TableCell>{order.planned_payment_date || "-"}</TableCell>
                   <TableCell>{order.beneficiary_name}</TableCell>
                   <TableCell>
-                    {order.payment_method === 'transfer' && 'Transferencia'}
-                    {order.payment_method === 'check' && 'Cheque'}
-                    {order.payment_method === 'cash' && 'Efectivo'}
-                    {order.payment_method === 'credit_card' && 'Tarjeta de Crédito'}
-                    {order.payment_method === 'debit_card' && 'Tarjeta de Débito'}
+                    {order.payment_method === "transfer" && "Transferencia"}
+                    {order.payment_method === "check" && "Cheque"}
+                    {order.payment_method === "cash" && "Efectivo"}
+                    {order.payment_method === "credit_card" &&
+                      "Tarjeta de Crédito"}
+                    {order.payment_method === "debit_card" &&
+                      "Tarjeta de Débito"}
+                  </TableCell>
+                  <TableCell>
+                    {order.purchase_order?.order_number || "-"}
+                  </TableCell>
+                  <TableCell>
+                    {order.expense
+                      ? `${order.expense.invoice_series}-${order.expense.invoice_number}`
+                      : "-"}
                   </TableCell>
                   <TableCell className="text-right font-semibold">
-                    {order.currency} {order.amount?.toLocaleString('es-UY', { maximumFractionDigits: 2 })}
+                    {order.currency}{" "}
+                    {order.amount?.toLocaleString("es-UY", {
+                      maximumFractionDigits: 2,
+                    })}
                   </TableCell>
-                  <TableCell>{order.account_id ? 'Asignada' : '-'}</TableCell>
-                  <TableCell>{order.payment_date || '-'}</TableCell>
+                  <TableCell>{order.account_id ? "Asignada" : "-"}</TableCell>
+                  <TableCell>{order.payment_date || "-"}</TableCell>
                   <TableCell>
                     <div className="flex gap-2">
                       <button
@@ -269,7 +336,7 @@ export function PaymentOrderListView({ firmId, onAdd = () => {}, onExecuteOrder 
                         <Eye size={16} />
                       </button>
 
-                      {order.status === 'PENDING_APPROVAL' && (
+                      {order.status === "PENDING_APPROVAL" && (
                         <>
                           <button
                             className="text-green-600 hover:text-green-800 p-1 rounded hover:bg-green-50"
@@ -288,7 +355,7 @@ export function PaymentOrderListView({ firmId, onAdd = () => {}, onExecuteOrder 
                         </>
                       )}
 
-                      {order.status === 'APPROVED' && (
+                      {order.status === "APPROVED" && (
                         <button
                           className="text-emerald-600 hover:text-emerald-800 p-1 rounded hover:bg-emerald-50"
                           onClick={() => handleExecute(order)}
@@ -298,7 +365,9 @@ export function PaymentOrderListView({ firmId, onAdd = () => {}, onExecuteOrder 
                         </button>
                       )}
 
-                      {!['EXECUTED', 'REJECTED', 'CANCELLED'].includes(order.status) && (
+                      {!["EXECUTED", "REJECTED", "CANCELLED"].includes(
+                        order.status,
+                      ) && (
                         <button
                           className="text-orange-600 hover:text-orange-800 p-1 rounded hover:bg-orange-50"
                           onClick={() => handleCancel(order)}

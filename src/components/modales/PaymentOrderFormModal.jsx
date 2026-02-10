@@ -37,6 +37,7 @@ export function PaymentOrderFormModal({
   const [formData, setFormData] = useState({
     firm_id: firmId,
     order_date: new Date().toISOString().split("T")[0],
+    planned_payment_date: "",
     payment_method: "transfer",
     beneficiary_name: "",
     beneficiary_rut: "",
@@ -125,9 +126,9 @@ export function PaymentOrderFormModal({
       setLoadingExpenses(true);
       const { data, error } = await supabase
         .from("expenses")
-        .select("*")
+        .select("*, purchase_order:purchase_order_id(order_number)")
         .eq("firm_id", firmId)
-        .in("status", ["APPROVED", "PAID_PARTIAL"])
+        .in("status", ["pendiente", "APPROVED", "PAID_PARTIAL"])
         .gt("balance", 0)
         .order("invoice_date", { ascending: false });
 
@@ -160,6 +161,28 @@ export function PaymentOrderFormModal({
       setAmountsByExpense(initialAmounts);
     }
   }, [loadedExpenses.length, availableExpenses.length]);
+
+  useEffect(() => {
+    if (formData.planned_payment_date) return;
+    const expensesToUse =
+      availableExpenses.length > 0 ? availableExpenses : loadedExpenses;
+    const dueDates = expensesToUse
+      .map((expense) => expense.due_date)
+      .filter(Boolean);
+    if (dueDates.length > 0) {
+      const earliestDueDate = dueDates.sort()[0];
+      setFormData((prev) => ({
+        ...prev,
+        planned_payment_date: earliestDueDate,
+      }));
+      return;
+    }
+
+    setFormData((prev) => ({
+      ...prev,
+      planned_payment_date: prev.order_date,
+    }));
+  }, [availableExpenses, loadedExpenses, formData.planned_payment_date]);
 
   /**
    * Calcular monto total de la orden
@@ -196,6 +219,10 @@ export function PaymentOrderFormModal({
 
     if (!formData.payment_method) {
       newErrors.payment_method = "Método de pago requerido";
+    }
+
+    if (!formData.planned_payment_date) {
+      newErrors.planned_payment_date = "Fecha de pago planificada requerida";
     }
 
     if (!formData.concept?.trim()) {
@@ -314,6 +341,7 @@ export function PaymentOrderFormModal({
           id: expenseId,
           amount_paid: amount,
           balance: expense?.balance,
+          purchase_order_id: expense?.purchase_order_id || null,
         };
       });
 
@@ -366,6 +394,7 @@ export function PaymentOrderFormModal({
                     <th className="px-4 py-2 text-left">
                       <input type="checkbox" disabled />
                     </th>
+                    <th className="px-4 py-2 text-left">OC</th>
                     <th className="px-4 py-2 text-left">Nº Factura</th>
                     <th className="px-4 py-2 text-left">Proveedor</th>
                     <th className="px-4 py-2 text-left">Emisión</th>
@@ -377,7 +406,7 @@ export function PaymentOrderFormModal({
                   {loadingExpenses ? (
                     <tr>
                       <td
-                        colSpan="6"
+                        colSpan="7"
                         className="px-4 py-4 text-center text-gray-500"
                       >
                         Cargando facturas...
@@ -389,7 +418,7 @@ export function PaymentOrderFormModal({
                     ).length === 0 ? (
                     <tr>
                       <td
-                        colSpan="6"
+                        colSpan="7"
                         className="px-4 py-4 text-center text-gray-500"
                       >
                         No hay facturas disponibles para pagar
@@ -412,6 +441,9 @@ export function PaymentOrderFormModal({
                             }
                             disabled={isLoading}
                           />
+                        </td>
+                        <td className="px-4 py-3">
+                          {expense.purchase_order?.order_number || "-"}
                         </td>
                         <td className="px-4 py-3 font-medium">
                           {expense.invoice_series}-{expense.invoice_number}
@@ -484,6 +516,26 @@ export function PaymentOrderFormModal({
                   onChange={handleChange}
                   disabled={isLoading}
                 />
+              </div>
+
+              <div>
+                <Label htmlFor="planned_payment_date">
+                  Fecha de Pago Planificada *
+                </Label>
+                <Input
+                  id="planned_payment_date"
+                  name="planned_payment_date"
+                  type="date"
+                  value={formData.planned_payment_date}
+                  onChange={handleChange}
+                  disabled={isLoading}
+                  aria-invalid={!!errors.planned_payment_date}
+                />
+                {errors.planned_payment_date && (
+                  <p className="text-xs text-red-600 mt-1">
+                    {errors.planned_payment_date}
+                  </p>
+                )}
               </div>
 
               <div>

@@ -124,21 +124,14 @@ export function validarFacturaCompra(facturaData) {
     errores.category = "La categoría no puede exceder 100 caracteres";
   }
 
-  // Condiciones de pago - Nuevas opciones de cronograma
-  const condicionesValidas = [
-    "contado",
-    "30_dias",
-    "60_dias",
-    "90_dias",
-    "50_50",
-    "33_33_34",
-    "25_25_25_25",
-    "40_60",
-  ];
-  if (!facturaData.payment_terms) {
-    errores.payment_terms = "Condiciones de pago son requeridas";
-  } else if (!condicionesValidas.includes(facturaData.payment_terms)) {
-    errores.payment_terms = `Condiciones de pago inválidas. Usar una de: ${condicionesValidas.join(", ")}`;
+  // Condición de pago (Crédito / Contado) - SECTOR 2
+  const condicionesPagoValidas = ["credito", "contado"];
+  const condicion = facturaData.payment_condition;
+  if (!condicion) {
+    errores.payment_condition =
+      "Condición de pago es requerida (Crédito o Contado)";
+  } else if (!condicionesPagoValidas.includes(condicion)) {
+    errores.payment_condition = `Condición de pago inválida. Usar: ${condicionesPagoValidas.join(", ")}`;
   }
 
   // Moneda
@@ -261,6 +254,10 @@ export function validarOrdenPago(ordenData, facturasSeleccionadas) {
     errores.payment_method = "Método de pago es requerido";
   } else if (!metodosValidos.includes(ordenData.payment_method)) {
     errores.payment_method = `Método inválido. Usar: ${metodosValidos.join(", ")}`;
+  }
+
+  if (!ordenData.planned_payment_date) {
+    errores.planned_payment_date = "Fecha de pago planificada requerida";
   }
 
   // Beneficiario

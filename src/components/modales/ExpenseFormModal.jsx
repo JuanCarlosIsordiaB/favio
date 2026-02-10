@@ -21,8 +21,6 @@ import { AlertCircle } from 'lucide-react';
 import { supabase } from '../../lib/supabase';
 import { useChartOfAccounts } from '../../hooks/useChartOfAccounts';
 import { toast } from 'sonner';
-import { parsePaymentTerms } from '../../services/paymentScheduler';
-import PaymentSchedulePreview from './PaymentSchedulePreview';
 
 /**
  * Modal para crear/editar facturas de compra
@@ -52,13 +50,11 @@ export function ExpenseFormModal({
     category: 'Insumos',
     concept: '',
     currency: 'UYU',
-    // Múltiples items
     items: [],
-    // Totales calculados
     subtotal: 0,
     iva_amount: 0,
     total_amount: 0,
-    payment_terms: '',
+    payment_condition: 'credito',
     due_date: null,
     alert_days: 5,
     notes: '',
@@ -69,32 +65,24 @@ export function ExpenseFormModal({
     event_id: null
   });
 
-  // Estado para el formulario del item actual (antes de agregarlo a la lista)
   const [currentItem, setCurrentItem] = useState({
     concept: '',
     quantity: 0,
     unit: 'Unidades',
     unit_price: 0,
-    tax_rate: 22
+    tax_rate: 22,
+    supplier_item_code: ''
   });
 
   const [errors, setErrors] = useState({});
   const [costCenters, setCostCenters] = useState([]);
   const [agriculturalWorks, setAgriculturalWorks] = useState([]);
   const [livestockWorks, setLivestockWorks] = useState([]);
-  const [schedulePreview, setSchedulePreview] = useState([]);
-
   const categories = ['Insumos', 'Servicios', 'Mantenimiento', 'Impuestos', 'Otros gastos', 'Otra'];
   const [isCustomCategory, setIsCustomCategory] = useState(false);
-  const paymentTerms = [
-    { value: 'contado', label: 'Contado (100%)' },
-    { value: '30_dias', label: '30 días' },
-    { value: '60_dias', label: '60 días' },
-    { value: '90_dias', label: '90 días' },
-    { value: '50_50', label: '50/50 (30 y 60 días)' },
-    { value: '33_33_34', label: '33/33/34 (30, 60 y 90 días)' },
-    { value: '25_25_25_25', label: '25/25/25/25 (30, 60, 90 y 120 días)' },
-    { value: '40_60', label: '40/60 (Anticipo y saldo)' }
+  const paymentConditions = [
+    { value: 'credito', label: 'Crédito' },
+    { value: 'contado', label: 'Contado' }
   ];
   const currencies = ['UYU', 'USD'];
   const units = ['Unidades', 'Kilos', 'Litros', 'Hectáreas', 'Horas', 'Servicios'];
@@ -125,27 +113,6 @@ export function ExpenseFormModal({
   }, [formData.items]);
 
   /**
-   * Calcular preview de cronograma de pagos cuando cambia payment_terms o total_amount
-   */
-  useEffect(() => {
-    if (formData.payment_terms && formData.payment_terms !== '' && formData.total_amount > 0 && formData.invoice_date) {
-      try {
-        const preview = parsePaymentTerms(
-          formData.payment_terms,
-          formData.total_amount,
-          formData.invoice_date
-        );
-        setSchedulePreview(preview);
-      } catch (error) {
-        console.error('Error calculando preview de cronograma:', error);
-        setSchedulePreview([]);
-      }
-    } else {
-      setSchedulePreview([]);
-    }
-  }, [formData.payment_terms, formData.total_amount, formData.invoice_date]);
-
-  /**
    * Cargar datos de factura si está editando
    */
   useEffect(() => {
@@ -174,7 +141,7 @@ export function ExpenseFormModal({
         subtotal: 0,
         iva_amount: 0,
         total_amount: 0,
-        payment_terms: '',
+        payment_condition: 'credito',
         due_date: null,
         alert_days: 5,
         notes: '',
@@ -185,8 +152,10 @@ export function ExpenseFormModal({
         event_id: null,
         ...expense,
         items: expense.items || [],
-        // Asegurar que payment_terms tenga un valor por defecto si no existe
-        payment_terms: expense.payment_terms || ''
+        // Mapear condición de pago: si no existe, inferir desde payment_terms
+        payment_condition:
+          expense.payment_condition ||
+          (expense.payment_terms === 'contado' ? 'contado' : 'credito')
       });
     } else if (!isEditing) {
       // Resetear formulario cuando no está editando
@@ -208,7 +177,7 @@ export function ExpenseFormModal({
         subtotal: 0,
         iva_amount: 0,
         total_amount: 0,
-        payment_terms: '',
+        payment_condition: 'credito',
         due_date: null,
         alert_days: 5,
         notes: '',
@@ -315,8 +284,8 @@ export function ExpenseFormModal({
       newErrors.currency = 'Moneda requerida';
     }
 
-    if (!formData.payment_terms || formData.payment_terms === '') {
-      newErrors.payment_terms = 'Condiciones de pago requeridas';
+    if (!formData.payment_condition) {
+      newErrors.payment_condition = 'Condición de pago requerida';
     }
 
     if (formData.due_date) {
@@ -537,7 +506,7 @@ export function ExpenseFormModal({
           {/* Datos del Proveedor */}
           <div>
             <h3 className="font-semibold mb-3">Datos del Proveedor</h3>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-3 gap-4">
               <div>
                 <Label htmlFor="provider_name">Nombre Comercial *</Label>
                 <Input
@@ -665,14 +634,14 @@ export function ExpenseFormModal({
                 )}
               </div>
 
-              <div>
+              <div className="col-span-2">
                 <Label htmlFor="concept">Concepto/Producto</Label>
                 <Input
                   id="concept"
                   name="concept"
                   value={formData.concept}
                   onChange={handleChange}
-                  placeholder="Descripción del producto/servicio"
+                    placeholder="Descripción general del producto/servicio"
                   disabled={isLoading}
                 />
               </div>
@@ -690,6 +659,7 @@ export function ExpenseFormModal({
                   <thead className="bg-gray-100">
                     <tr>
                       <th className="px-3 py-2 text-left">Concepto</th>
+                      <th className="px-3 py-2 text-left">Código Ítem Prov.</th>
                       <th className="px-3 py-2 text-right">Cantidad</th>
                       <th className="px-3 py-2 text-left">Unidad</th>
                       <th className="px-3 py-2 text-right">P.U.</th>
@@ -704,6 +674,7 @@ export function ExpenseFormModal({
                       return (
                         <tr key={item.id} className="border-t hover:bg-gray-50">
                           <td className="px-3 py-2">{item.concept}</td>
+                          <td className="px-3 py-2">{item.supplier_item_code || '-'}</td>
                           <td className="px-3 py-2 text-right">{item.quantity.toFixed(2)}</td>
                           <td className="px-3 py-2">{item.unit}</td>
                           <td className="px-3 py-2 text-right">${item.unit_price.toFixed(2)}</td>
@@ -736,8 +707,8 @@ export function ExpenseFormModal({
             {/* Formulario para agregar nuevos items */}
             <div className="bg-gray-50 p-4 rounded border mb-4">
               <h4 className="font-medium text-sm mb-3">Agregar Nuevo Item</h4>
-              <div className="grid grid-cols-2 gap-3 mb-3">
-                <div>
+              <div className="grid grid-cols-3 gap-3 mb-3">
+                <div className="col-span-2">
                   <Label htmlFor="new_concept" className="text-xs">Concepto/Producto *</Label>
                   <Input
                     id="new_concept"
@@ -759,6 +730,19 @@ export function ExpenseFormModal({
                     value={currentItem.quantity}
                     onChange={handleCurrentItemChange}
                     step="0.01"
+                    disabled={isLoading}
+                    className="text-sm"
+                  />
+                </div>
+
+                <div>
+                  <Label htmlFor="new_supplier_item_code" className="text-xs">Código Ítem Proveedor</Label>
+                  <Input
+                    id="new_supplier_item_code"
+                    name="supplier_item_code"
+                    value={currentItem.supplier_item_code}
+                    onChange={handleCurrentItemChange}
+                    placeholder="Código interno del proveedor"
                     disabled={isLoading}
                     className="text-sm"
                   />
@@ -885,79 +869,64 @@ export function ExpenseFormModal({
           <div>
             <h3 className="font-semibold mb-3">Condiciones de Pago</h3>
             <div className="grid grid-cols-2 gap-4">
-              <div className="col-span-2">
-                <Label htmlFor="payment_terms">Condiciones de Pago *</Label>
+              <div>
+                <Label htmlFor="payment_condition">Condición de Pago *</Label>
                 <Select
-                  value={formData.payment_terms || undefined}
-                  onValueChange={(value) => handleSelectChange('payment_terms', value)}
+                  value={formData.payment_condition}
+                  onValueChange={(value) => handleSelectChange('payment_condition', value)}
                   disabled={isLoading}
                 >
-                  <SelectTrigger aria-invalid={!!errors.payment_terms}>
-                    <SelectValue placeholder="Selecciona una opción..." />
+                  <SelectTrigger aria-invalid={!!errors.payment_condition}>
+                    <SelectValue placeholder="Selecciona crédito o contado..." />
                   </SelectTrigger>
                   <SelectContent>
-                    {paymentTerms.map(pt => (
-                      <SelectItem key={pt.value} value={pt.value}>
-                        {pt.label}
+                    {paymentConditions.map(pc => (
+                      <SelectItem key={pc.value} value={pc.value}>
+                        {pc.label}
                       </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
-                {errors.payment_terms && (
+                {errors.payment_condition && (
                   <div className="flex items-center gap-1 mt-1 text-sm text-red-500">
                     <AlertCircle size={14} />
-                    {errors.payment_terms}
+                    {errors.payment_condition}
                   </div>
                 )}
-                <p className="text-xs text-slate-500 mt-1">Estas condiciones generarán automáticamente los pagos en el módulo de pagos</p>
               </div>
 
-              {formData.payment_terms && formData.payment_terms !== '' && (
-                <div className="col-span-2">
-                  <Label htmlFor="due_date">Fecha de Vencimiento (Opcional)</Label>
-                  <Input
-                    id="due_date"
-                    name="due_date"
-                    type="date"
-                    value={formData.due_date || ''}
-                    onChange={handleChange}
-                    disabled={isLoading}
-                    aria-invalid={!!errors.due_date}
-                  />
-                  {errors.due_date && (
-                    <div className="flex items-center gap-1 mt-1 text-sm text-red-500">
-                      <AlertCircle size={14} />
-                      {errors.due_date}
-                    </div>
-                  )}
-                </div>
-              )}
+              <div>
+                <Label htmlFor="due_date">Fecha de Vencimiento (Opcional)</Label>
+                <Input
+                  id="due_date"
+                  name="due_date"
+                  type="date"
+                  value={formData.due_date || ''}
+                  onChange={handleChange}
+                  disabled={isLoading}
+                  aria-invalid={!!errors.due_date}
+                />
+                {errors.due_date && (
+                  <div className="flex items-center gap-1 mt-1 text-sm text-red-500">
+                    <AlertCircle size={14} />
+                    {errors.due_date}
+                  </div>
+                )}
+              </div>
 
-              {formData.payment_terms && formData.payment_terms !== '' && (
-                <div className="col-span-2">
-                  <Label htmlFor="alert_days">Alerta (días antes)</Label>
-                  <Input
-                    id="alert_days"
-                    name="alert_days"
-                    type="number"
-                    value={formData.alert_days}
-                    onChange={handleChange}
-                    min="1"
-                    disabled={isLoading}
-                  />
-                </div>
-              )}
-            </div>
-
-            {/* Preview del cronograma de pagos */}
-            {schedulePreview.length > 0 && (
-              <div className="mt-4">
-                <PaymentSchedulePreview
-                  schedule={schedulePreview}
-                  currency={formData.currency}
+              <div>
+                <Label htmlFor="alert_days">Alerta (días antes)</Label>
+                <Input
+                  id="alert_days"
+                  name="alert_days"
+                  type="number"
+                  value={formData.alert_days}
+                  onChange={handleChange}
+                  min="1"
+                  disabled={isLoading}
                 />
               </div>
-            )}
+            </div>
           </div>
 
           {/* Notas */}

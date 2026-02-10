@@ -1,13 +1,20 @@
-import { Badge } from '../ui/badge';
-import { Button } from '../ui/button';
-import { Card } from '../ui/card';
-import { Input } from '../ui/input';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
-import { Package, AlertCircle, Loader } from 'lucide-react';
-import RemittanceReceiveModal from '../modales/RemittanceReceiveModal';
-import InputFormModal from '../modales/InputFormModal';
-import { useState, useEffect } from 'react';
-import { toast } from 'sonner';
+import { Badge } from "../ui/badge";
+import { Button } from "../ui/button";
+import { Card } from "../ui/card";
+import { Input } from "../ui/input";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "../ui/table";
+import { Package, AlertCircle, Loader } from "lucide-react";
+import RemittanceReceiveModal from "../modales/RemittanceReceiveModal";
+import InputFormModal from "../modales/InputFormModal";
+import { useState, useEffect } from "react";
+import { toast } from "sonner";
 
 export default function RemittanceReceptionView({
   remittances,
@@ -15,12 +22,14 @@ export default function RemittanceReceptionView({
   selectedFirm,
   selectedPremise,
   currentUser,
-  onRefresh
+  onRefresh,
 }) {
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState("");
   const [selectedRemittance, setSelectedRemittance] = useState(null);
   const [isReceiveModalOpen, setIsReceiveModalOpen] = useState(false);
-  const [itemsNeedingInputCreation, setItemsNeedingInputCreation] = useState([]);
+  const [itemsNeedingInputCreation, setItemsNeedingInputCreation] = useState(
+    [],
+  );
   const [currentItemCreating, setCurrentItemCreating] = useState(null);
   const [isInputFormModalOpen, setIsInputFormModalOpen] = useState(false);
   const [depots, setDepots] = useState([]);
@@ -34,23 +43,24 @@ export default function RemittanceReceptionView({
 
   const loadDepots = async () => {
     try {
-      const { supabase } = await import('../../lib/supabase');
+      const { supabase } = await import("../../lib/supabase");
       // Cargar todos los depósitos de la firma, no solo del predio seleccionado
       const { data } = await supabase
-        .from('lots')
-        .select('id, name')
-        .eq('firm_id', selectedFirm.id)
-        .eq('is_depot', true)
-        .order('name');
+        .from("lots")
+        .select("id, name")
+        .eq("firm_id", selectedFirm.id)
+        .eq("is_depot", true)
+        .order("name");
       setDepots(data || []);
     } catch (err) {
-      console.warn('Error cargando depósitos:', err);
+      console.warn("Error cargando depósitos:", err);
     }
   };
 
-  const filteredRemittances = remittances.filter(r =>
-    r.remittance_number.includes(searchQuery) ||
-    r.supplier_name.toLowerCase().includes(searchQuery.toLowerCase())
+  const filteredRemittances = remittances.filter(
+    (r) =>
+      r.remittance_number.includes(searchQuery) ||
+      r.supplier_name.toLowerCase().includes(searchQuery.toLowerCase()),
   );
 
   const handleReceive = (remittance) => {
@@ -60,39 +70,55 @@ export default function RemittanceReceptionView({
 
   const handleSubmitReceive = async (remittanceId, itemsData) => {
     try {
-      const { recibirRemitoParciamente, vincularInputAlItem } = await import('../../services/remittances');
-      const { crearInsumo } = await import('../../services/inputs');
+      const { recibirRemitoParciamente } =
+        await import("../../services/remittances");
 
       // Actualizar ítems y marcar remito como parcialmente recibido
-      const result = await recibirRemitoParciamente(remittanceId, currentUser, itemsData);
+      const result = await recibirRemitoParciamente(
+        remittanceId,
+        currentUser,
+        itemsData,
+      );
 
       // CRÍTICO: Cerrar el modal de recepción primero
       setIsReceiveModalOpen(false);
 
       // Verificar si hay items que necesitan crear insumo
-      if (result.itemsNeedingInputCreation && result.itemsNeedingInputCreation.length > 0) {
-        console.log('📝 [handleSubmitReceive] Abriendo InputFormModal con', result.itemsNeedingInputCreation.length, 'items');
+      if (
+        result.itemsNeedingInputCreation &&
+        result.itemsNeedingInputCreation.length > 0
+      ) {
+        console.log(
+          "📝 [handleSubmitReceive] Abriendo InputFormModal con",
+          result.itemsNeedingInputCreation.length,
+          "items",
+        );
         setItemsNeedingInputCreation(result.itemsNeedingInputCreation);
         setCurrentItemCreating(result.itemsNeedingInputCreation[0]);
-        toast.info(`Necesitas crear ${result.itemsNeedingInputCreation.length} insumo(s) para este remito`);
+        toast.info(
+          `Necesitas crear ${result.itemsNeedingInputCreation.length} insumo(s) para este remito`,
+        );
         // Abrir el modal después de un pequeño delay para asegurar que se renderice
         setTimeout(() => {
           setIsInputFormModalOpen(true);
         }, 100);
       } else {
-        toast.success('✓ Remito recibido\n✓ Stock actualizado');
+        toast.success("✓ Remito recibido\n✓ Stock actualizado");
         onRefresh();
       }
     } catch (err) {
-      console.error('Error:', err);
-      toast.error('Error procesando recepción');
+      console.error("Error:", err);
+      toast.error("Error procesando recepción");
     }
   };
 
   const handleCreateInput = async (formData) => {
     try {
-      const { crearInsumo } = await import('../../services/inputs');
-      const { vincularInputAlItem } = await import('../../services/remittances');
+      const { crearInsumo } = await import("../../services/inputs");
+      const { vincularInputAlItem } =
+        await import("../../services/remittances");
+      const { registrarMovimiento } =
+        await import("../../services/inputMovements");
 
       // Crear el insumo
       // Nota: initial_stock del formulario se mapea a current_stock en Supabase
@@ -100,18 +126,42 @@ export default function RemittanceReceptionView({
         ...formData,
         firm_id: selectedFirm.id,
         premise_id: selectedPremise.id,
-        // Si initial_stock no viene en formData, usar la cantidad recibida
-        current_stock: formData.initial_stock || currentItemCreating.quantity_received
+        // Se registra el ingreso via movimiento, arrancar en 0 para evitar doble conteo
+        current_stock: 0,
+        stock_status: formData.stock_status || "disponible",
       });
 
       // Vincular el insumo al item del remito
       await vincularInputAlItem(currentItemCreating.id, nuevoInsumo.id);
 
-      toast.success(`✓ Insumo "${currentItemCreating.item_description}" creado`);
+      // Registrar movimiento de ingreso con trazabilidad completa
+      if (currentItemCreating.quantity_received > 0) {
+        await registrarMovimiento({
+          input_id: nuevoInsumo.id,
+          type: "entry",
+          quantity: currentItemCreating.quantity_received,
+          date: formData.entry_date || new Date().toISOString().split("T")[0],
+          description:
+            `Ingreso por remito ${selectedRemittance?.remittance_number || ""}`.trim(),
+          firm_id: selectedFirm.id,
+          premise_id:
+            selectedRemittance?.premise_id || selectedPremise?.id || null,
+          lot_id: formData.depot_id || null,
+          document_reference: selectedRemittance?.remittance_number || null,
+          remittance_id: selectedRemittance?.id || null,
+          purchase_order_id: selectedRemittance?.purchase_order_id || null,
+          invoice_id: selectedRemittance?.invoice_id || null,
+          batch_number: formData.batch_number || null,
+        });
+      }
+
+      toast.success(
+        `✓ Insumo "${currentItemCreating.item_description}" creado`,
+      );
 
       // Verificar si hay más items faltantes
       const remainingItems = itemsNeedingInputCreation.filter(
-        item => item.id !== currentItemCreating.id
+        (item) => item.id !== currentItemCreating.id,
       );
 
       if (remainingItems.length > 0) {
@@ -127,18 +177,24 @@ export default function RemittanceReceptionView({
         setIsInputFormModalOpen(false);
         setItemsNeedingInputCreation([]);
         setCurrentItemCreating(null);
-        toast.success('✓ Todos los insumos creados correctamente');
+        toast.success("✓ Todos los insumos creados correctamente");
         onRefresh();
         setIsReceiveModalOpen(false);
       }
     } catch (err) {
-      console.error('Error creando insumo:', err);
-      toast.error('Error creando insumo: ' + (err.message || 'Error desconocido'));
+      console.error("Error creando insumo:", err);
+      toast.error(
+        "Error creando insumo: " + (err.message || "Error desconocido"),
+      );
     }
   };
 
   if (loading) {
-    return <div className="flex justify-center p-12"><Loader className="w-6 h-6 animate-spin" /></div>;
+    return (
+      <div className="flex justify-center p-12">
+        <Loader className="w-6 h-6 animate-spin" />
+      </div>
+    );
   }
 
   return (
@@ -171,12 +227,16 @@ export default function RemittanceReceptionView({
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredRemittances.map(remittance => (
+                {filteredRemittances.map((remittance) => (
                   <TableRow key={remittance.id}>
-                    <TableCell className="font-medium">{remittance.remittance_number}</TableCell>
+                    <TableCell className="font-medium">
+                      {remittance.remittance_number}
+                    </TableCell>
                     <TableCell>{remittance.remittance_date}</TableCell>
                     <TableCell>{remittance.supplier_name}</TableCell>
-                    <TableCell className="text-right">{remittance.items?.length || 0}</TableCell>
+                    <TableCell className="text-right">
+                      {remittance.items?.length || 0}
+                    </TableCell>
                     <TableCell className="text-right">
                       <Button
                         size="sm"
@@ -219,11 +279,16 @@ export default function RemittanceReceptionView({
           }}
           depots={depots}
           initialData={{
-            name: currentItemCreating.item_description || '',
+            name: currentItemCreating.item_description || "",
             initial_stock: currentItemCreating.quantity_received || 0,
-            unit: currentItemCreating.unit || '',
-            depot_id: depots.length > 0 ? depots[0].id : '', // Preseleccionar primer depósito si existe
-            category: 'Otros' // Categoría por defecto
+            unit: currentItemCreating.unit || "",
+            depot_id: depots.length > 0 ? depots[0].id : "", // Preseleccionar primer depósito si existe
+            category: currentItemCreating.category || "Otros",
+            entry_date:
+              selectedRemittance?.received_date ||
+              selectedRemittance?.remittance_date ||
+              new Date().toISOString().split("T")[0],
+            stock_status: "disponible",
           }}
         />
       )}

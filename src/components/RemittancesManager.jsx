@@ -11,19 +11,32 @@
  * Stack: React, Supabase, sonner, lucide-react, shadcn/ui
  */
 
-import { useState, useEffect } from 'react';
-import { useRemittances } from '../hooks/useRemittances';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from './ui/tabs';
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from './ui/card';
-import { Button } from './ui/button';
-import { Plus, Package, TruckIcon, ClipboardList, AlertCircle, Loader } from 'lucide-react';
-import { toast } from 'sonner';
-import RemittanceFormModal from './modales/RemittanceFormModal';
-import RemittanceListView from './vistas/RemittanceListView';
-import RemittanceReceptionView from './vistas/RemittanceReceptionView';
-import RemittanceReportsView from './vistas/RemittanceReportsView';
-import { crearRegistro } from '../services/registros';
-import { cn } from '../lib/utils';
+import { useState, useEffect } from "react";
+import { useRemittances } from "../hooks/useRemittances";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "./ui/tabs";
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "./ui/card";
+import { Button } from "./ui/button";
+import {
+  Plus,
+  Package,
+  TruckIcon,
+  ClipboardList,
+  AlertCircle,
+  Loader,
+} from "lucide-react";
+import { toast } from "sonner";
+import RemittanceFormModal from "./modales/RemittanceFormModal";
+import RemittanceListView from "./vistas/RemittanceListView";
+import RemittanceReceptionView from "./vistas/RemittanceReceptionView";
+import RemittanceReportsView from "./vistas/RemittanceReportsView";
+import { crearRegistro } from "../services/registros";
+import { cn } from "../lib/utils";
 
 /**
  * Componente principal del Módulo de Remitos
@@ -32,12 +45,16 @@ import { cn } from '../lib/utils';
  * @param {Object} props.selectedPremise - Predio seleccionado
  * @param {string} props.currentUser - Usuario actual
  */
-export default function RemittancesManager({ selectedFirm, selectedPremise, currentUser }) {
+export default function RemittancesManager({
+  selectedFirm,
+  selectedPremise,
+  currentUser,
+}) {
   // ===========================
   // ESTADO
   // ===========================
 
-  const [currentTab, setCurrentTab] = useState('list');
+  const [currentTab, setCurrentTab] = useState("list");
   const [isCreatingRemittance, setIsCreatingRemittance] = useState(false);
   const [stats, setStats] = useState(null);
   const [statsLoading, setStatsLoading] = useState(false);
@@ -49,7 +66,7 @@ export default function RemittancesManager({ selectedFirm, selectedPremise, curr
     loadRemittances,
     addRemittance,
     getStatistics,
-    getPendingRemittances
+    getPendingRemittances,
   } = useRemittances();
 
   // ===========================
@@ -78,7 +95,7 @@ export default function RemittancesManager({ selectedFirm, selectedPremise, curr
       const statistics = await getStatistics(selectedFirm.id);
       setStats(statistics);
     } catch (err) {
-      console.error('Error cargando estadísticas:', err);
+      console.error("Error cargando estadísticas:", err);
     } finally {
       setStatsLoading(false);
     }
@@ -92,7 +109,7 @@ export default function RemittancesManager({ selectedFirm, selectedPremise, curr
       const pending = await getPendingRemittances(selectedFirm.id, 30);
       setPendingRemittances(pending || []);
     } catch (err) {
-      console.error('Error cargando remitos pendientes:', err);
+      console.error("Error cargando remitos pendientes:", err);
     }
   };
 
@@ -108,20 +125,23 @@ export default function RemittancesManager({ selectedFirm, selectedPremise, curr
         await crearRegistro({
           firmId: selectedFirm.id,
           premiseId: selectedPremise?.id || remittanceData.premise_id,
-          tipo: 'remito_creado',
+          tipo: "remito_creado",
           descripcion: `Remito ${remittanceData.remittance_number} creado para ${remittanceData.supplier_name}`,
-          moduloOrigen: 'remitos',
+          moduloOrigen: "remitos",
           usuario: currentUser,
-          metadata: { remittance_id: nuevoRemito.id }
+          metadata: { remittance_id: nuevoRemito.id },
         });
       } catch (auditErr) {
-        console.warn('Advertencia: No se pudo registrar en auditoría', auditErr);
+        console.warn(
+          "Advertencia: No se pudo registrar en auditoría",
+          auditErr,
+        );
       }
 
       setIsCreatingRemittance(false);
       await loadStats();
     } catch (err) {
-      console.error('Error creando remito:', err);
+      console.error("Error creando remito:", err);
     }
   };
 
@@ -133,7 +153,7 @@ export default function RemittancesManager({ selectedFirm, selectedPremise, curr
       await loadRemittances(selectedFirm.id);
       await loadStats();
       await loadPendingRemittances();
-      toast.success('Datos actualizados');
+      toast.success("Datos actualizados");
     }
   };
 
@@ -162,11 +182,7 @@ export default function RemittancesManager({ selectedFirm, selectedPremise, curr
           </p>
         </div>
         <div className="flex gap-2">
-          <Button
-            onClick={handleRefresh}
-            variant="outline"
-            size="sm"
-          >
+          <Button onClick={handleRefresh} variant="outline" size="sm">
             Actualizar
           </Button>
           <Button
@@ -184,9 +200,12 @@ export default function RemittancesManager({ selectedFirm, selectedPremise, curr
         <div className="rounded-lg bg-orange-50 border border-orange-200 p-4 flex items-start gap-3">
           <AlertCircle className="w-5 h-5 text-orange-600 mt-0.5 flex-shrink-0" />
           <div className="flex-1">
-            <h3 className="font-medium text-orange-900">Remitos pendientes de recepción</h3>
+            <h3 className="font-medium text-orange-900">
+              Remitos pendientes de recepción
+            </h3>
             <p className="text-sm text-orange-800 mt-1">
-              {pendingRemittances.length} remito(s) en tránsito hace más de 30 días sin ser procesados.
+              {pendingRemittances.length} remito(s) en tránsito hace más de 30
+              días sin ser procesados.
             </p>
           </div>
         </div>
@@ -198,10 +217,14 @@ export default function RemittancesManager({ selectedFirm, selectedPremise, curr
           {/* Total Remitos */}
           <Card className="bg-gradient-to-br from-blue-50 to-blue-100 border-blue-200">
             <CardHeader className="pb-2">
-              <CardTitle className="text-sm font-medium text-slate-700">Total Remitos</CardTitle>
+              <CardTitle className="text-sm font-medium text-slate-700">
+                Total Remitos
+              </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold text-blue-600">{stats.total}</div>
+              <div className="text-3xl font-bold text-blue-600">
+                {stats.total}
+              </div>
               <p className="text-xs text-slate-600 mt-1">Desde el inicio</p>
             </CardContent>
           </Card>
@@ -211,12 +234,16 @@ export default function RemittancesManager({ selectedFirm, selectedPremise, curr
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-slate-700 flex items-center">
                 <TruckIcon className="w-4 h-4 mr-2 text-blue-600" />
-                En Tránsito
+                Pendientes / Enviados
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold text-blue-600">{stats.in_transit}</div>
-              <p className="text-xs text-slate-600 mt-1">Pendientes de recibir</p>
+              <div className="text-3xl font-bold text-blue-600">
+                {stats.in_transit}
+              </div>
+              <p className="text-xs text-slate-600 mt-1">
+                Pendientes de recibir
+              </p>
             </CardContent>
           </Card>
 
@@ -229,7 +256,9 @@ export default function RemittancesManager({ selectedFirm, selectedPremise, curr
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold text-green-600">{stats.received}</div>
+              <div className="text-3xl font-bold text-green-600">
+                {stats.received}
+              </div>
               <p className="text-xs text-slate-600 mt-1">Stock actualizado</p>
             </CardContent>
           </Card>
@@ -243,7 +272,9 @@ export default function RemittancesManager({ selectedFirm, selectedPremise, curr
               </CardTitle>
             </CardHeader>
             <CardContent>
-              <div className="text-3xl font-bold text-orange-600">{stats.partially_received}</div>
+              <div className="text-3xl font-bold text-orange-600">
+                {stats.partially_received}
+              </div>
               <p className="text-xs text-slate-600 mt-1">Falta recibir</p>
             </CardContent>
           </Card>
@@ -264,7 +295,11 @@ export default function RemittancesManager({ selectedFirm, selectedPremise, curr
       )}
 
       {/* ===== TABS DE VISTAS ===== */}
-      <Tabs value={currentTab} onValueChange={setCurrentTab} className="bg-white rounded-lg border">
+      <Tabs
+        value={currentTab}
+        onValueChange={setCurrentTab}
+        className="bg-white rounded-lg border"
+      >
         <TabsList className="w-full justify-start border-b rounded-none bg-slate-50">
           <TabsTrigger value="list" className="rounded-none">
             <ClipboardList className="w-4 h-4 mr-2" />
@@ -311,7 +346,14 @@ export default function RemittancesManager({ selectedFirm, selectedPremise, curr
             </div>
           ) : (
             <RemittanceReceptionView
-              remittances={remittances.filter(r => r.status === 'in_transit')}
+              remittances={remittances.filter((r) =>
+                [
+                  "pending",
+                  "sent",
+                  "in_transit",
+                  "partially_received",
+                ].includes(r.status),
+              )}
               loading={loading}
               selectedFirm={selectedFirm}
               selectedPremise={selectedPremise}

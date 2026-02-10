@@ -1,15 +1,34 @@
-import { useState } from 'react';
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from '../ui/dialog';
-import { Button } from '../ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '../ui/card';
-import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '../ui/table';
-import { Badge } from '../ui/badge';
-import { Download, FileText, Paperclip } from 'lucide-react';
-import { toast } from 'sonner';
-import { exportarRemitoPDF } from '../../services/remittanceExports';
-import RemittanceAttachmentsModal from './RemittanceAttachmentsModal';
+import { useState } from "react";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogHeader,
+  DialogTitle,
+} from "../ui/dialog";
+import { Button } from "../ui/button";
+import { Card, CardContent, CardHeader, CardTitle } from "../ui/card";
+import {
+  Table,
+  TableBody,
+  TableCell,
+  TableHead,
+  TableHeader,
+  TableRow,
+} from "../ui/table";
+import { Badge } from "../ui/badge";
+import { Download, FileText, Paperclip } from "lucide-react";
+import { toast } from "sonner";
+import { exportarRemitoPDF } from "../../services/remittanceExports";
+import RemittanceAttachmentsModal from "./RemittanceAttachmentsModal";
 
-export default function RemittanceDetailModal({ isOpen, remittance, onClose, onReceive, firm }) {
+export default function RemittanceDetailModal({
+  isOpen,
+  remittance,
+  onClose,
+  onReceive,
+  firm,
+}) {
   const [showAttachments, setShowAttachments] = useState(false);
 
   if (!isOpen || !remittance) return null;
@@ -17,29 +36,33 @@ export default function RemittanceDetailModal({ isOpen, remittance, onClose, onR
   const handleExportPDF = async () => {
     try {
       exportarRemitoPDF(remittance, firm);
-      toast.success('PDF descargado exitosamente');
+      toast.success("PDF descargado exitosamente");
     } catch (err) {
-      console.error('Error:', err);
-      toast.error('Error descargando PDF: ' + err.message);
+      console.error("Error:", err);
+      toast.error("Error descargando PDF: " + err.message);
     }
   };
 
   const getStatusColor = (status) => {
     const colors = {
-      'in_transit': 'bg-blue-100 text-blue-800',
-      'received': 'bg-green-100 text-green-800',
-      'partially_received': 'bg-orange-100 text-orange-800',
-      'cancelled': 'bg-red-100 text-red-800'
+      in_transit: "bg-blue-100 text-blue-800",
+      received: "bg-green-100 text-green-800",
+      partially_received: "bg-orange-100 text-orange-800",
+      cancelled: "bg-red-100 text-red-800",
+      pending: "bg-yellow-100 text-yellow-800",
+      sent: "bg-blue-100 text-blue-800",
     };
-    return colors[status] || 'bg-slate-100 text-slate-800';
+    return colors[status] || "bg-slate-100 text-slate-800";
   };
 
   const getStatusLabel = (status) => {
     const labels = {
-      'in_transit': 'En Tránsito',
-      'received': 'Recibido',
-      'partially_received': 'Parcialmente Recibido',
-      'cancelled': 'Cancelado'
+      in_transit: "Enviado",
+      received: "Recibido",
+      partially_received: "Parcialmente Recibido",
+      cancelled: "Cancelado",
+      pending: "Pendiente",
+      sent: "Enviado",
     };
     return labels[status] || status;
   };
@@ -72,19 +95,33 @@ export default function RemittanceDetailModal({ isOpen, remittance, onClose, onR
               </div>
               <div>
                 <span className="text-slate-600">Proveedor RUT:</span>
-                <p className="font-medium">{remittance.supplier_rut || '-'}</p>
+                <p className="font-medium">{remittance.supplier_rut || "-"}</p>
+              </div>
+              <div>
+                <span className="text-slate-600">Nº Orden (OC):</span>
+                <p className="font-medium">
+                  {remittance.purchase_order?.order_number || "-"}
+                </p>
+              </div>
+              <div>
+                <span className="text-slate-600">Nº Factura:</span>
+                <p className="font-medium">
+                  {(remittance.invoice?.invoice_series
+                    ? `${remittance.invoice.invoice_series}-`
+                    : "") + (remittance.invoice?.invoice_number || "-")}
+                </p>
               </div>
               <div>
                 <span className="text-slate-600">Predio:</span>
-                <p className="font-medium">{remittance.premise?.name || '-'}</p>
+                <p className="font-medium">{remittance.premise?.name || "-"}</p>
               </div>
               <div>
                 <span className="text-slate-600">Depósito:</span>
-                <p className="font-medium">{remittance.depot?.name || '-'}</p>
+                <p className="font-medium">{remittance.depot?.name || "-"}</p>
               </div>
               <div className="col-span-2">
                 <span className="text-slate-600">Recibido por:</span>
-                <p className="font-medium">{remittance.received_by || '-'}</p>
+                <p className="font-medium">{remittance.received_by || "-"}</p>
               </div>
               {remittance.received_date && (
                 <div className="col-span-2">
@@ -98,7 +135,9 @@ export default function RemittanceDetailModal({ isOpen, remittance, onClose, onR
           {/* Ítems */}
           <Card>
             <CardHeader className="pb-3">
-              <CardTitle className="text-base">Ítems ({remittance.items?.length || 0})</CardTitle>
+              <CardTitle className="text-base">
+                Ítems ({remittance.items?.length || 0})
+              </CardTitle>
             </CardHeader>
             <CardContent>
               <div className="border rounded-lg overflow-hidden">
@@ -106,18 +145,22 @@ export default function RemittanceDetailModal({ isOpen, remittance, onClose, onR
                   <TableHeader>
                     <TableRow className="bg-slate-50">
                       <TableHead>Descripción</TableHead>
+                      <TableHead>Categoría</TableHead>
                       <TableHead className="text-right">Cantidad</TableHead>
                       <TableHead>Unidad</TableHead>
                       <TableHead>Insumo</TableHead>
                     </TableRow>
                   </TableHeader>
                   <TableBody>
-                    {remittance.items?.map(item => (
+                    {remittance.items?.map((item) => (
                       <TableRow key={item.id}>
                         <TableCell>{item.item_description}</TableCell>
-                        <TableCell className="text-right">{item.quantity_received || item.quantity_ordered}</TableCell>
+                        <TableCell>{item.category || "-"}</TableCell>
+                        <TableCell className="text-right">
+                          {item.quantity_received || item.quantity_ordered}
+                        </TableCell>
                         <TableCell>{item.unit}</TableCell>
-                        <TableCell>{item.input?.name ? '✓' : '-'}</TableCell>
+                        <TableCell>{item.input?.name ? "✓" : "-"}</TableCell>
                       </TableRow>
                     ))}
                   </TableBody>
@@ -160,14 +203,15 @@ export default function RemittanceDetailModal({ isOpen, remittance, onClose, onR
               <Button variant="outline" onClick={onClose}>
                 Cerrar
               </Button>
-              {remittance.status === 'in_transit' && onReceive && (
-                <Button
-                  onClick={() => onReceive(remittance.id)}
-                  className="bg-green-600 hover:bg-green-700"
-                >
-                  Procesar Recepción
-                </Button>
-              )}
+              {["pending", "sent", "in_transit"].includes(remittance.status) &&
+                onReceive && (
+                  <Button
+                    onClick={() => onReceive(remittance.id)}
+                    className="bg-green-600 hover:bg-green-700"
+                  >
+                    Procesar Recepción
+                  </Button>
+                )}
             </div>
           </div>
         </div>

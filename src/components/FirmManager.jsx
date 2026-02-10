@@ -3,7 +3,6 @@ import { toast } from 'sonner';
 import { supabase } from '../lib/supabase';
 import { Building2, Plus, MapPin, Check, Loader, Edit2, Trash2, AlertTriangle } from 'lucide-react';
 import { crearRegistro } from '../services/registros';
-import { deleteFirmWithCleanup, checkFirmDependencies } from '../services/firmDeletion';
 import { useAuth } from '../contexts/AuthContext';
 import { usePermissions } from './guards/PermissionGuard';
 import { STRUCTURE_PERMISSIONS } from '../lib/permissions';
@@ -12,6 +11,7 @@ export default function FirmManager({ onSelectFirm, selectedFirmId }) {
   const { user } = useAuth();
   const { canDelete } = usePermissions({ canDelete: STRUCTURE_PERMISSIONS.DELETE });
   const [firms, setFirms] = useState([]);
+  const [firmAccessMap, setFirmAccessMap] = useState({}); // Mapa de firm_id -> user_firm_access.id
   const [isLoading, setIsLoading] = useState(true);
   const [showForm, setShowForm] = useState(false);
   const [formData, setFormData] = useState({
@@ -58,26 +58,60 @@ export default function FirmManager({ onSelectFirm, selectedFirmId }) {
   }
 
   useEffect(() => {
-    fetchFirms();
-  }, []);
+    if (user?.id) {
+      fetchFirms();
+    }
+  }, [user?.id]);
 
   async function fetchFirms() {
     try {
       setIsLoading(true);
-      const { data, error } = await supabase
-        .from('firms')
-        .select('*')
-        .order('created_at', { ascending: false });
+      
+      // Cargar solo las firmas del usuario desde user_firm_access
+      const { data: firmAccess, error: accessError } = await supabase
+        .from('user_firm_access')
+        .select(`
+          id,
+          firm_id,
+          role,
+          is_default,
+          firms:firm_id (
+            id,
+            name,
+            rut,
+            location,
+            currency,
+            management_currency,
+            taxpayer_profile,
+            business_units,
+            created_at
+          )
+        `)
+        .eq('user_id', user?.id)
+        .is('revoked_at', null)
+        .order('is_default', { ascending: false });
 
-      if (error) throw error;
-      setFirms(data);
+      if (accessError) throw accessError;
+
+      // Extraer las firmas y crear el mapa de acceso
+      const firmsData = firmAccess?.map(access => access.firms).filter(Boolean) || [];
+      const accessMap = {};
+      firmAccess?.forEach(access => {
+        if (access.firms) {
+          accessMap[access.firms.id] = access.id;
+        }
+      });
+
+      setFirms(firmsData);
+      setFirmAccessMap(accessMap);
       
       // Auto-select if only one exists and none selected
-      if (data.length === 1 && !selectedFirmId && onSelectFirm) {
-        onSelectFirm(data[0]);
+      if (firmsData.length === 1 && !selectedFirmId && onSelectFirm) {
+        onSelectFirm(firmsData[0]);
       }
     } catch (error) {
       console.error('Error fetching firms:', error);
+      toast.error('Error al cargar las firmas');
     } finally {
       setIsLoading(false);
     }
@@ -204,6 +238,9 @@ export default function FirmManager({ onSelectFirm, selectedFirmId }) {
           : `Firma "${formData.name}" actualizada exitosamente`
       );
 
+      // Recargar firmas para actualizar el mapa de acceso
+      await fetchFirms();
+
       setShowForm(false);
       setFormData({
         name: '',
@@ -219,6 +256,7 @@ export default function FirmManager({ onSelectFirm, selectedFirmId }) {
 
       // If we just edited or created the selected firm, update the selection
       if (editingId === selectedFirmId || (!editingId && onSelectFirm)) {
+        // Usar los datos de la firma recién creada/actualizada
         if (onSelectFirm) onSelectFirm(data);
       }
     } catch (error) {
@@ -235,45 +273,58 @@ export default function FirmManager({ onSelectFirm, selectedFirmId }) {
     try {
       setIsSubmitting(true);
 
-      // FIX #10: Usar enfoque arquitectónico para eliminación de firma
-      // Esto investiga todas las dependencias, limpia las auto-creadas,
-      // y solo elimina si no hay datos user-created (o si se fuerza la eliminación)
-      const result = await deleteFirmWithCleanup({
-        firmId: editingId,
-        firmName: formData.name,
-        userId: user?.id || 'sistema',
-        forceDelete: forceDelete
-      });
-
-      if (!result.success) {
-        // Error al eliminar
-          toast.error(result.message || 'Error al eliminar la firma');
+      // Obtener el ID del acceso user_firm_access para esta firma
+      const accessId = firmAccessMap[editingId];
+      
+      if (!accessId) {
+        toast.error('No se encontró el acceso a esta firma');
         setShowDeleteConfirm(false);
         setIsSubmitting(false);
         return;
       }
 
-      // Éxito
-      let successMessage = result.message;
-      if (result.cascadeDeleted && Object.keys(result.cascadeDeleted).length > 0) {
-        const deletedItems = Object.entries(result.cascadeDeleted)
-          .filter(([_, count]) => count > 0)
-          .map(([key, count]) => {
-            const labels = {
-              lots: 'lotes',
-              premises: 'predios',
-              expenses: 'gastos',
-              income: 'ingresos',
-              works: 'trabajos'
-            };
-            return `${count} ${labels[key] || key}`;
-          });
-        successMessage = `Firma eliminada. También se eliminaron: ${deletedItems.join(', ')}`;
-      }
-      
-      toast.success(successMessage);
+      // Revocar el acceso del usuario a la firma (no eliminar la firma de la BD)
+      const { error } = await supabase
+        .from('user_firm_access')
+        .update({ revoked_at: new Date().toISOString() })
+        .eq('id', accessId);
 
+      if (error) {
+        console.error('Error revocando acceso:', error);
+        toast.error('Error al remover la firma de "Mis Firmas"');
+        setShowDeleteConfirm(false);
+        setIsSubmitting(false);
+        return;
+      }
+
+      // Registrar en auditoría
+      try {
+        await crearRegistro({
+          firmId: editingId,
+          premiseId: null,
+          lotId: null,
+          tipo: 'firma_removida',
+          descripcion: `Firma "${formData.name}" removida de "Mis Firmas"`,
+          moduloOrigen: 'firmas',
+          usuario: user?.full_name || 'sistema',
+          referencia: editingId,
+          metadata: {
+            nombre: formData.name,
+            accion: 'revocacion_acceso'
+          }
+        });
+      } catch (auditError) {
+        console.warn('Error registrando en auditoría:', auditError);
+        // No bloqueamos la operación si falla la auditoría
+      }
+
+      toast.success(`Firma "${formData.name}" removida de "Mis Firmas"`);
+
+      // Remover de la lista visualmente
       setFirms(firms.filter(f => f.id !== editingId));
+      const newAccessMap = { ...firmAccessMap };
+      delete newAccessMap[editingId];
+      setFirmAccessMap(newAccessMap);
 
       if (selectedFirmId === editingId && onSelectFirm) {
         onSelectFirm(null);
@@ -294,8 +345,8 @@ export default function FirmManager({ onSelectFirm, selectedFirmId }) {
       setDeleteBlockers([]);
       setForceDelete(false);
     } catch (error) {
-      console.error('Error deleting firm:', error);
-      toast.error('Error inesperado al eliminar la firma');
+      console.error('Error removing firm:', error);
+      toast.error('Error inesperado al remover la firma');
     } finally {
       setIsSubmitting(false);
     }
@@ -369,55 +420,20 @@ export default function FirmManager({ onSelectFirm, selectedFirmId }) {
                   <AlertTriangle size={24} />
                 </div>
                 <h3 className="text-lg font-bold text-slate-900 mb-2 text-center">
-                  ¿Estás seguro de eliminar esta firma?
+                  ¿Remover esta firma de "Mis Firmas"?
                 </h3>
                 
-                {deleteBlockers.length > 0 ? (
-                  <>
-                    <div className="bg-amber-50 border border-amber-200 rounded-lg p-4 mb-4">
-                      <p className="text-sm font-semibold text-amber-900 mb-2">
-                        ⚠️ Esta firma contiene datos que deben eliminarse primero:
-                      </p>
-                      <ul className="text-sm text-amber-800 space-y-1 text-left">
-                        {deleteBlockers.map((blocker, idx) => (
-                          <li key={idx} className="flex items-center gap-2">
-                            <span className="w-2 h-2 bg-amber-600 rounded-full"></span>
-                            {blocker.description} ({blocker.count})
-                          </li>
-                        ))}
-                      </ul>
-                    </div>
-                    <div className="mb-4">
-                      <label className="flex items-start gap-3 cursor-pointer">
-                        <input
-                          type="checkbox"
-                          checked={forceDelete}
-                          onChange={(e) => setForceDelete(e.target.checked)}
-                          className="mt-1 w-4 h-4 text-red-600 border-slate-300 rounded focus:ring-red-500"
-                        />
-                        <span className="text-sm text-slate-700">
-                          <span className="font-semibold text-red-600">Eliminar todo en cascada:</span> 
-                          {' '}Eliminar la firma junto con todos los datos relacionados listados arriba. 
-                          <span className="block mt-1 text-red-600 font-semibold">
-                            Esta acción es irreversible.
-                          </span>
-                        </span>
-                      </label>
-                    </div>
-                  </>
-                ) : (
-                  <p className="text-slate-600 mb-6 text-center">
-                  Esta acción eliminará la firma y todos sus datos asociados. <br/>
-                  <span className="font-semibold text-red-600">Esta acción no tiene vuelta atrás.</span>
+                <p className="text-slate-600 mb-6 text-center">
+                  Esta acción removerá la firma de "Mis Firmas". <br/>
+                  <span className="text-sm text-slate-500 mt-2 block">
+                    La firma no se eliminará de la base de datos, solo dejará de aparecer en tu lista.
+                  </span>
                 </p>
-                )}
                 
                 <div className="flex gap-3 justify-center">
                   <button
                     onClick={() => {
                       setShowDeleteConfirm(false);
-                      setForceDelete(false);
-                      setDeleteBlockers([]);
                     }}
                     disabled={isSubmitting}
                     className="px-4 py-2 text-slate-600 hover:bg-slate-100 rounded-lg font-medium disabled:opacity-50"
@@ -426,14 +442,10 @@ export default function FirmManager({ onSelectFirm, selectedFirmId }) {
                   </button>
                   <button
                     onClick={handleDelete}
-                    disabled={isSubmitting || (deleteBlockers.length > 0 && !forceDelete)}
-                    className={`px-4 py-2 rounded-lg font-medium disabled:opacity-50 disabled:cursor-not-allowed ${
-                      deleteBlockers.length > 0 && !forceDelete
-                        ? 'bg-slate-300 text-slate-500'
-                        : 'bg-red-600 text-white hover:bg-red-700'
-                    }`}
+                    disabled={isSubmitting}
+                    className="px-4 py-2 bg-red-600 text-white rounded-lg font-medium hover:bg-red-700 disabled:opacity-50 disabled:cursor-not-allowed"
                   >
-                    {isSubmitting ? 'Eliminando...' : (deleteBlockers.length > 0 ? 'Eliminar Todo' : 'Sí, Eliminar')}
+                    {isSubmitting ? 'Removiendo...' : 'Sí, Remover'}
                   </button>
                 </div>
               </div>
@@ -445,29 +457,11 @@ export default function FirmManager({ onSelectFirm, selectedFirmId }) {
             {editingId && (
               <button
                 type="button"
-                onClick={async () => {
-                  // Verificar dependencias antes de mostrar el modal
-                  try {
-                    const deps = await checkFirmDependencies(editingId);
-                    const blockers = Object.entries(deps)
-                      .filter(([key, dep]) => !dep.canDelete && dep.count > 0)
-                      .map(([key, dep]) => ({
-                        table: key,
-                        count: dep.count,
-                        description: dep.description
-                      }));
-                    
-                    setDeleteBlockers(blockers);
-                    setForceDelete(false);
-                    setShowDeleteConfirm(true);
-                  } catch (error) {
-                    console.error('Error verificando dependencias:', error);
-                    setDeleteBlockers([]);
-                    setShowDeleteConfirm(true);
-                  }
+                onClick={() => {
+                  setShowDeleteConfirm(true);
                 }}
                 disabled={!canDelete}
-                title={!canDelete ? 'No tienes permiso para eliminar firmas' : 'Eliminar esta firma'}
+                title={!canDelete ? 'No tienes permiso para remover firmas' : 'Remover esta firma de "Mis Firmas"'}
                 className={`flex items-center gap-2 text-sm font-medium p-2 rounded-lg transition-colors ${
                   canDelete
                     ? 'text-red-500 hover:text-red-700 hover:bg-red-50'
@@ -475,7 +469,7 @@ export default function FirmManager({ onSelectFirm, selectedFirmId }) {
                 }`}
               >
                 <Trash2 size={16} />
-                Eliminar Firma
+                Remover de Mis Firmas
               </button>
             )}
           </div>

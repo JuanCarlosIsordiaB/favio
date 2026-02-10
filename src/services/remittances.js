@@ -1,57 +1,64 @@
 /**
  * Servicios CRUD para Remitos en Supabase
- * Módulo 09: Registro de recepciones de mercadería
- * Sincronizado con SCHEMA.sql tabla: remittances
- *
- * Este módulo maneja:
- * - Creación y gestión de remitos
- * - Vinculación con ítems (remittance_items)
- * - Recepción de mercadería (trigger automático de stock)
- * - Búsquedas y filtros
- * - Estadísticas y reportes
- */
+    const receivedAt = remittanceWithItems.received_date || new Date().toISOString().split("T")[0];
+    const data = await actualizarRemitoSinTrigger({
+      remittanceId,
+      status: finalStatus,
+      receivedBy,
+      receivedDate: receivedAt,
+    });
 
-import { supabase } from '../lib/supabase';
+    const originalById = new Map(
+      (originalItems || []).map((item) => [item.id, item]),
+    );
 
-// ===========================
-// FUNCIONES DE LECTURA
-// ===========================
+    for (const item of items || []) {
+      const original = originalById.get(item.id);
+      const inputId = item.input_id || original?.input_id;
+      const prevQty = original?.quantity_received || 0;
+      const nextQty = item.quantity_received || 0;
+      const delta = nextQty - prevQty;
+
+      if (!inputId || delta <= 0) continue;
+
+      await registrarMovimiento({
+        input_id: inputId,
+        type: "entry",
+        quantity: delta,
+        date: receivedAt,
+        description: `Ingreso por remito ${remittanceWithItems.remittance_number}`,
+        firm_id: remittanceWithItems.firm_id,
+        premise_id: remittanceWithItems.premise_id,
+        lot_id: remittanceWithItems.depot_id,
+        document_reference: remittanceWithItems.remittance_number,
+        remittance_id: remittanceId,
+        purchase_order_id: remittanceWithItems.purchase_order_id,
+        invoice_id: remittanceWithItems.invoice_id,
+        batch_number: item.batch_number || original?.batch_number || null,
+      });
+    }
+  }
+}
 
 /**
- * Obtener todos los remitos de una firma
+ * Obtener remitos por firma
  * @param {string} firmId - ID de la firma
  * @returns {Object} { data: remittances }
  */
 export async function obtenerRemitosPorFirma(firmId) {
   try {
-    if (!firmId) throw new Error('firmId es requerido');
+    if (!firmId) throw new Error("firmId es requerido");
 
     const { data, error } = await supabase
-      .from('remittances')
-      .select(`
-        *,
-        premise:premises(id, name),
-        depot:lots(id, name),
-        purchase_order:purchase_orders(id, order_number),
-        items:remittance_items(
-          id,
-          item_description,
-          quantity_ordered,
-          quantity_received,
-          unit,
-          condition,
-          batch_number,
-          batch_expiry_date,
-          input_id
-        )
-      `)
-      .eq('firm_id', firmId)
-      .order('remittance_date', { ascending: false });
+      .from("remittances")
+      .select("*")
+      .eq("firm_id", firmId)
+      .order("remittance_date", { ascending: false });
 
     if (error) throw error;
     return { data: data || [] };
   } catch (error) {
-    console.error('Error en obtenerRemitosPorFirma:', error);
+    console.error("Error en obtenerRemitosPorFirma:", error);
     throw error;
   }
 }
@@ -63,42 +70,47 @@ export async function obtenerRemitosPorFirma(firmId) {
  */
 export async function obtenerRemitoPorId(remittanceId) {
   try {
-    if (!remittanceId) throw new Error('remittanceId es requerido');
+    if (!remittanceId) throw new Error("remittanceId es requerido");
 
     // Obtener remito
     const { data: remittance, error: remittanceError } = await supabase
-      .from('remittances')
-      .select(`
+      .from("remittances")
+      .select(
+        `
         *,
         premise:premises(id, name),
         depot:lots(id, name),
-        purchase_order:purchase_orders(id, order_number)
-      `)
-      .eq('id', remittanceId)
+        purchase_order:purchase_orders(id, order_number),
+        invoice:expenses!remittances_invoice_id_fkey(id, invoice_number, invoice_series)
+      `,
+      )
+      .eq("id", remittanceId)
       .single();
 
     if (remittanceError) throw remittanceError;
 
     // Obtener ítems
     const { data: items, error: itemsError } = await supabase
-      .from('remittance_items')
-      .select(`
+      .from("remittance_items")
+      .select(
+        `
         *,
         input:inputs(id, name, unit),
         purchase_order_item:purchase_order_items(*)
-      `)
-      .eq('remittance_id', remittanceId);
+      `,
+      )
+      .eq("remittance_id", remittanceId);
 
     if (itemsError) throw itemsError;
 
     return {
       data: {
         ...remittance,
-        items: items || []
-      }
+        items: items || [],
+      },
     };
   } catch (error) {
-    console.error('Error en obtenerRemitoPorId:', error);
+    console.error("Error en obtenerRemitoPorId:", error);
     throw error;
   }
 }
@@ -111,46 +123,43 @@ export async function obtenerRemitoPorId(remittanceId) {
  */
 export async function buscarRemitos(firmId, filtros = {}) {
   try {
-    if (!firmId) throw new Error('firmId es requerido');
+    if (!firmId) throw new Error("firmId es requerido");
 
-    let query = supabase
-      .from('remittances')
-      .select('*')
-      .eq('firm_id', firmId);
+    let query = supabase.from("remittances").select("*").eq("firm_id", firmId);
 
     // Filtros opcionales
     if (filtros.status) {
-      query = query.eq('status', filtros.status);
+      query = query.eq("status", filtros.status);
     }
 
     if (filtros.premiseId) {
-      query = query.eq('premise_id', filtros.premiseId);
+      query = query.eq("premise_id", filtros.premiseId);
     }
 
     if (filtros.depotId) {
-      query = query.eq('depot_id', filtros.depotId);
+      query = query.eq("depot_id", filtros.depotId);
     }
 
     if (filtros.supplierName) {
-      query = query.ilike('supplier_name', `%${filtros.supplierName}%`);
+      query = query.ilike("supplier_name", `%${filtros.supplierName}%`);
     }
 
     if (filtros.dateFrom) {
-      query = query.gte('remittance_date', filtros.dateFrom);
+      query = query.gte("remittance_date", filtros.dateFrom);
     }
 
     if (filtros.dateTo) {
-      query = query.lte('remittance_date', filtros.dateTo);
+      query = query.lte("remittance_date", filtros.dateTo);
     }
 
-    query = query.order('remittance_date', { ascending: false });
+    query = query.order("remittance_date", { ascending: false });
 
     const { data, error } = await query;
 
     if (error) throw error;
     return { data: data || [] };
   } catch (error) {
-    console.error('Error en buscarRemitos:', error);
+    console.error("Error en buscarRemitos:", error);
     throw error;
   }
 }
@@ -163,20 +172,20 @@ export async function buscarRemitos(firmId, filtros = {}) {
  */
 export async function obtenerRemitosPorEstado(firmId, status) {
   try {
-    if (!firmId) throw new Error('firmId es requerido');
-    if (!status) throw new Error('status es requerido');
+    if (!firmId) throw new Error("firmId es requerido");
+    if (!status) throw new Error("status es requerido");
 
     const { data, error } = await supabase
-      .from('remittances')
-      .select('*')
-      .eq('firm_id', firmId)
-      .eq('status', status)
-      .order('remittance_date', { ascending: false });
+      .from("remittances")
+      .select("*")
+      .eq("firm_id", firmId)
+      .eq("status", status)
+      .order("remittance_date", { ascending: false });
 
     if (error) throw error;
     return { data: data || [] };
   } catch (error) {
-    console.error('Error en obtenerRemitosPorEstado:', error);
+    console.error("Error en obtenerRemitosPorEstado:", error);
     throw error;
   }
 }
@@ -194,23 +203,39 @@ export async function obtenerRemitosPorEstado(firmId, status) {
 export async function crearRemito(remittanceData, items) {
   try {
     // Validaciones
-    if (!remittanceData.firm_id) throw new Error('firm_id es requerido');
-    if (!remittanceData.remittance_number) throw new Error('remittance_number es requerido');
-    if (!remittanceData.supplier_name) throw new Error('supplier_name es requerido');
-    if (!items || items.length === 0) throw new Error('Debe haber al menos un ítem');
+    if (!remittanceData.firm_id) throw new Error("firm_id es requerido");
+    if (!remittanceData.remittance_number)
+      throw new Error("remittance_number es requerido");
+    if (!remittanceData.supplier_name)
+      throw new Error("supplier_name es requerido");
+    if (!items || items.length === 0)
+      throw new Error("Debe haber al menos un ítem");
 
-    console.log('🔍 [crearRemito] Items recibidos:', JSON.stringify(items, null, 2));
-    console.log('🔍 [crearRemito] Cantidad de items:', items.length);
+    console.log(
+      "🔍 [crearRemito] Items recibidos:",
+      JSON.stringify(items, null, 2),
+    );
+    console.log("🔍 [crearRemito] Cantidad de items:", items.length);
 
     // 1. Crear remito
-    console.log('📝 [crearRemito] Insertando remittance:', remittanceData.remittance_number);
+    console.log(
+      "📝 [crearRemito] Insertando remittance:",
+      remittanceData.remittance_number,
+    );
 
     // Sanitizar datos: convertir strings vacíos a null para campos UUID
     // También eliminar campos que no existen en la tabla remittances
     const sanitizedData = {
       ...remittanceData,
-      depot_id: remittanceData.depot_id?.trim() ? remittanceData.depot_id : null,
-      purchase_order_id: remittanceData.purchase_order_id?.trim() ? remittanceData.purchase_order_id : null
+      depot_id: remittanceData.depot_id?.trim()
+        ? remittanceData.depot_id
+        : null,
+      purchase_order_id: remittanceData.purchase_order_id?.trim()
+        ? remittanceData.purchase_order_id
+        : null,
+      invoice_id: remittanceData.invoice_id?.trim()
+        ? remittanceData.invoice_id
+        : null,
     };
 
     // Eliminar campos que no existen en la tabla remittances y que pueden causar problemas con triggers
@@ -218,26 +243,31 @@ export async function crearRemito(remittanceData, items) {
     delete sanitizedData.created_by;
     delete sanitizedData.created_by_user;
 
-    console.log('✅ [crearRemito] Datos sanitizados:', JSON.stringify(sanitizedData, null, 2));
+    console.log(
+      "✅ [crearRemito] Datos sanitizados:",
+      JSON.stringify(sanitizedData, null, 2),
+    );
 
     // Intentar crear el remito
     // NOTA: Si hay un trigger que intenta usar user_id en audit, fallará
     // El trigger necesita ser corregido en la base de datos para usar 'usuario' en lugar de 'user_id'
     let newRemittance;
     let remittanceError;
-    
+
     try {
       const result = await supabase
-        .from('remittances')
-        .insert([{
-          ...sanitizedData,
-          status: sanitizedData.status || 'in_transit',
-          created_at: new Date().toISOString(),
-          updated_at: new Date().toISOString()
-        }])
+        .from("remittances")
+        .insert([
+          {
+            ...sanitizedData,
+            status: sanitizedData.status || "pending",
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          },
+        ])
         .select()
         .single();
-      
+
       newRemittance = result.data;
       remittanceError = result.error;
     } catch (err) {
@@ -245,7 +275,12 @@ export async function crearRemito(remittanceData, items) {
     }
 
     // Si el error es sobre user_id en audit, es un problema del trigger en la BD
-    if (remittanceError && remittanceError.message && remittanceError.message.includes('user_id') && remittanceError.message.includes('audit')) {
+    if (
+      remittanceError &&
+      remittanceError.message &&
+      remittanceError.message.includes("user_id") &&
+      remittanceError.message.includes("audit")
+    ) {
       const errorMsg = `
         Error en trigger de base de datos: El trigger que se ejecuta al crear un remito está intentando usar 
         la columna 'user_id' en la tabla 'audit', pero esa columna no existe. 
@@ -259,47 +294,60 @@ export async function crearRemito(remittanceData, items) {
         
         Error original: ${remittanceError.message}
       `;
-      console.error('❌ [crearRemito] Error en trigger de BD:', errorMsg);
-      throw new Error('Error en trigger de base de datos. El trigger necesita usar "usuario" en lugar de "user_id" en la tabla audit. Contacta al administrador de la base de datos.');
+      console.error("❌ [crearRemito] Error en trigger de BD:", errorMsg);
+      throw new Error(
+        'Error en trigger de base de datos. El trigger necesita usar "usuario" en lugar de "user_id" en la tabla audit. Contacta al administrador de la base de datos.',
+      );
     }
 
     if (remittanceError) throw remittanceError;
 
-    console.log('✅ [crearRemito] Remittance creado con ID:', newRemittance.id);
+    console.log("✅ [crearRemito] Remittance creado con ID:", newRemittance.id);
 
     // 2. Crear ítems
-    const itemsData = items.map(item => ({
+    const itemsData = items.map((item) => ({
       remittance_id: newRemittance.id,
       item_description: item.item_description,
       quantity_ordered: item.quantity_ordered || 0,
       quantity_received: item.quantity_received || 0,
+      category: item.category || null,
       unit: item.unit,
       input_id: item.input_id || null,
       purchase_order_item_id: item.purchase_order_item_id || null,
-      condition: item.condition || 'good',
+      condition: item.condition || "good",
       notes: item.notes || null,
-      created_at: new Date().toISOString()
+      created_at: new Date().toISOString(),
     }));
 
-    console.log('📋 [crearRemito] Items mapeados para insertar:', JSON.stringify(itemsData, null, 2));
+    console.log(
+      "📋 [crearRemito] Items mapeados para insertar:",
+      JSON.stringify(itemsData, null, 2),
+    );
 
     const { error: itemsError, data: insertedItems } = await supabase
-      .from('remittance_items')
+      .from("remittance_items")
       .insert(itemsData)
       .select();
 
     if (itemsError) {
-      console.error('❌ [crearRemito] Error insertando items:', itemsError);
+      console.error("❌ [crearRemito] Error insertando items:", itemsError);
       throw itemsError;
     }
 
-    console.log('✅ [crearRemito] Items insertados:', insertedItems?.length || 0, 'items');
-    console.log('✅ [crearRemito] Datos insertados:', JSON.stringify(insertedItems, null, 2));
+    console.log(
+      "✅ [crearRemito] Items insertados:",
+      insertedItems?.length || 0,
+      "items",
+    );
+    console.log(
+      "✅ [crearRemito] Datos insertados:",
+      JSON.stringify(insertedItems, null, 2),
+    );
 
     // Retornar remito CON items incluidos para que aparezcan en el estado
     return { ...newRemittance, items: insertedItems || [] };
   } catch (error) {
-    console.error('❌ Error en crearRemito:', error);
+    console.error("❌ Error en crearRemito:", error);
     throw error;
   }
 }
@@ -312,22 +360,22 @@ export async function crearRemito(remittanceData, items) {
  */
 export async function actualizarRemito(remittanceId, updates) {
   try {
-    if (!remittanceId) throw new Error('remittanceId es requerido');
+    if (!remittanceId) throw new Error("remittanceId es requerido");
 
     const { data, error } = await supabase
-      .from('remittances')
+      .from("remittances")
       .update({
         ...updates,
-        updated_at: new Date().toISOString()
+        updated_at: new Date().toISOString(),
       })
-      .eq('id', remittanceId)
+      .eq("id", remittanceId)
       .select()
       .single();
 
     if (error) throw error;
     return data;
   } catch (error) {
-    console.error('Error en actualizarRemito:', error);
+    console.error("Error en actualizarRemito:", error);
     throw error;
   }
 }
@@ -341,63 +389,91 @@ export async function actualizarRemito(remittanceId, updates) {
  * @param {string} receivedDate - Fecha de recepción (opcional, usa hoy por defecto)
  * @returns {Object} Remito actualizado
  */
-export async function recibirRemito(remittanceId, receivedBy, receivedDate = null) {
+export async function recibirRemito(
+  remittanceId,
+  receivedBy,
+  receivedDate = null,
+) {
   try {
-    if (!remittanceId) throw new Error('remittanceId es requerido');
-    if (!receivedBy) throw new Error('receivedBy es requerido');
+    if (!remittanceId) throw new Error("remittanceId es requerido");
+    if (!receivedBy) throw new Error("receivedBy es requerido");
 
-    const { data, error } = await supabase
-      .from('remittances')
-      .update({
-        status: 'received',
-        received_by: receivedBy,
-        received_date: receivedDate || new Date().toISOString().split('T')[0],
-        updated_at: new Date().toISOString()
-      })
-      .eq('id', remittanceId)
-      .select()
+    const receivedAt = receivedDate || new Date().toISOString().split("T")[0];
+    const updated = await actualizarRemitoSinTrigger({
+      remittanceId,
+      status: "received",
+      receivedBy,
+      receivedDate: receivedAt,
+    });
+
+    const { data: remittance, error: remittanceError } = await supabase
+      .from("remittances")
+      .select(
+        "id, remittance_number, firm_id, premise_id, depot_id, purchase_order_id, invoice_id",
+      )
+      .eq("id", remittanceId)
       .single();
 
-    if (error) throw error;
+    if (remittanceError) throw remittanceError;
 
-    // El trigger handle_remittance_received se ejecuta automáticamente en Supabase
-    // Crea automáticamente:
-    // 1. input_movements para cada ítem
-    // 2. Actualiza stock de insumos
-    // 3. Crea registro de auditoría
+    const { data: items, error: itemsError } = await supabase
+      .from("remittance_items")
+      .select("id, input_id, quantity_received, batch_number")
+      .eq("remittance_id", remittanceId);
 
-    return data;
+    if (itemsError) throw itemsError;
+
+    for (const item of items || []) {
+      if (
+        !item.input_id ||
+        !item.quantity_received ||
+        item.quantity_received <= 0
+      )
+        continue;
+
+      await registrarMovimiento({
+        input_id: item.input_id,
+        type: "entry",
+        quantity: item.quantity_received,
+        date: receivedAt,
+        description: `Ingreso por remito ${remittance.remittance_number}`,
+        firm_id: remittance.firm_id,
+        premise_id: remittance.premise_id,
+        lot_id: remittance.depot_id,
+        document_reference: remittance.remittance_number,
+        remittance_id: remittance.id,
+        purchase_order_id: remittance.purchase_order_id,
+        invoice_id: remittance.invoice_id,
+        batch_number: item.batch_number || null,
+      });
+    }
+
+    return updated;
   } catch (error) {
-    console.error('Error en recibirRemito:', error);
+    console.error("Error en recibirRemito:", error);
     throw error;
   }
 }
 
-/**
- * Cancelar remito
- * @param {string} remittanceId - ID del remito
- * @param {string} reason - Razón de cancelación (opcional)
- * @returns {Object} Remito cancelado
- */
 export async function cancelarRemito(remittanceId, reason = null) {
   try {
-    if (!remittanceId) throw new Error('remittanceId es requerido');
+    if (!remittanceId) throw new Error("remittanceId es requerido");
 
     const { data, error } = await supabase
-      .from('remittances')
+      .from("remittances")
       .update({
-        status: 'cancelled',
-        notes: reason ? `CANCELADO: ${reason}` : 'CANCELADO',
-        updated_at: new Date().toISOString()
+        status: "cancelled",
+        notes: reason ? `CANCELADO: ${reason}` : "CANCELADO",
+        updated_at: new Date().toISOString(),
       })
-      .eq('id', remittanceId)
+      .eq("id", remittanceId)
       .select()
       .single();
 
     if (error) throw error;
     return data;
   } catch (error) {
-    console.error('Error en cancelarRemito:', error);
+    console.error("Error en cancelarRemito:", error);
     throw error;
   }
 }
@@ -409,56 +485,76 @@ export async function cancelarRemito(remittanceId, reason = null) {
  * @param {Array} items - Ítems con cantidades parciales
  * @returns {Object} Remito actualizado
  */
-export async function recibirRemitoParciamente(remittanceId, receivedBy, items) {
+export async function recibirRemitoParciamente(
+  remittanceId,
+  receivedBy,
+  items,
+) {
   try {
-    if (!remittanceId) throw new Error('remittanceId es requerido');
+    if (!remittanceId) throw new Error("remittanceId es requerido");
 
-    // 1. PRIMERO: Obtener items ORIGINALES con input_id = NULL ANTES de cualquier cambio
-    console.log('🔍 [recibirRemitoParciamente] Obteniendo items originales con input_id = NULL');
-    const { data: originalItemsWithoutInput } = await supabase
-      .from('remittance_items')
-      .select('id, item_description, quantity_received, unit, input_id')
-      .eq('remittance_id', remittanceId)
-      .is('input_id', null);
+    // 1. PRIMERO: Obtener items ORIGINALES ANTES de cualquier cambio
+    console.log("🔍 [recibirRemitoParciamente] Obteniendo items originales");
+    const { data: originalItems, error: originalItemsError } = await supabase
+      .from("remittance_items")
+      .select(
+        "id, item_description, quantity_received, unit, input_id, category, batch_number, batch_expiry_date, purchase_order_item_id",
+      )
+      .eq("remittance_id", remittanceId);
 
-    console.log('📋 [recibirRemitoParciamente] Items originales sin insumo:', originalItemsWithoutInput?.map(i => ({
-      id: i.id,
-      description: i.item_description,
-      quantity_received: i.quantity_received
-    })));
+    if (originalItemsError) throw originalItemsError;
+
+    const originalItemsWithoutInput = (originalItems || []).filter(
+      (item) => !item.input_id,
+    );
+
+    console.log(
+      "📋 [recibirRemitoParciamente] Items originales sin insumo:",
+      originalItemsWithoutInput?.map((i) => ({
+        id: i.id,
+        description: i.item_description,
+        quantity_received: i.quantity_received,
+      })),
+    );
 
     // 2. Actualizar cantidades recibidas en ítems (incluyendo batch y vencimiento)
     for (const item of items) {
-      console.log('🔄 [recibirRemitoParciamente] Actualizando item:', {
+      console.log("🔄 [recibirRemitoParciamente] Actualizando item:", {
         itemId: item.id,
         quantity_received: item.quantity_received,
         condition: item.condition,
         batch_number: item.batch_number,
-        batch_expiry_date: item.batch_expiry_date
+        batch_expiry_date: item.batch_expiry_date,
       });
       await actualizarItemRemito(item.id, {
         quantity_received: item.quantity_received,
-        condition: item.condition || 'good',
+        condition: item.condition || "good",
         batch_number: item.batch_number || null,
-        batch_expiry_date: item.batch_expiry_date || null
+        batch_expiry_date: item.batch_expiry_date || null,
       });
     }
 
     // Obtener remito con todos sus ítems para calcular porcentaje
     const { data: remittanceWithItems, error: fetchError } = await supabase
-      .from('remittances')
-      .select(`
+      .from("remittances")
+      .select(
+        `
         id,
         remittance_number,
         firm_id,
         premise_id,
+        depot_id,
+        purchase_order_id,
+        invoice_id,
+        received_date,
         items:remittance_items(
           id,
           quantity_ordered,
           quantity_received
         )
-      `)
-      .eq('id', remittanceId)
+      `,
+      )
+      .eq("id", remittanceId)
       .single();
 
     if (fetchError) throw fetchError;
@@ -468,147 +564,105 @@ export async function recibirRemitoParciamente(remittanceId, receivedBy, items) 
     let totalReceived = 0;
 
     if (remittanceWithItems.items && remittanceWithItems.items.length > 0) {
-      totalOrdered = remittanceWithItems.items.reduce((sum, item) => sum + (item.quantity_ordered || 0), 0);
-      totalReceived = remittanceWithItems.items.reduce((sum, item) => sum + (item.quantity_received || 0), 0);
+      totalOrdered = remittanceWithItems.items.reduce(
+        (sum, item) => sum + (item.quantity_ordered || 0),
+        0,
+      );
+      totalReceived = remittanceWithItems.items.reduce(
+        (sum, item) => sum + (item.quantity_received || 0),
+        0,
+      );
     }
 
     // Determinar estado: si recibió 100%, marcar como 'received' para que trigger se ejecute
     const isComplete = totalOrdered > 0 && totalReceived >= totalOrdered;
-    const finalStatus = isComplete ? 'received' : 'partially_received';
+    const finalStatus = isComplete ? "received" : "partially_received";
 
-    // Actualizar remito con estado determinado
-    // NOTA: El trigger en la BD puede estar intentando acceder a cancellation_reason que no existe
-    // Intentamos usar función RPC si existe, sino usamos actualización directa
-    let data, error;
-    
-    // Intentar primero con función RPC (si fue creada en la BD)
-    try {
-      const rpcResult = await supabase.rpc('update_remittance_received', {
-        p_remittance_id: remittanceId,
-        p_status: finalStatus,
-        p_received_by: receivedBy,
-        p_received_date: new Date().toISOString().split('T')[0]
+    const receivedAt =
+      remittanceWithItems.received_date ||
+      new Date().toISOString().split("T")[0];
+    const data = await actualizarRemitoSinTrigger({
+      remittanceId,
+      status: finalStatus,
+      receivedBy,
+      receivedDate: receivedAt,
+    });
+
+    const originalById = new Map(
+      (originalItems || []).map((item) => [item.id, item]),
+    );
+
+    for (const item of items || []) {
+      const original = originalById.get(item.id);
+      const inputId = item.input_id || original?.input_id;
+      const prevQty = original?.quantity_received || 0;
+      const nextQty = item.quantity_received || 0;
+      const delta = nextQty - prevQty;
+
+      if (!inputId || delta <= 0) continue;
+
+      await registrarMovimiento({
+        input_id: inputId,
+        type: "entry",
+        quantity: delta,
+        date: receivedAt,
+        description: `Ingreso por remito ${remittanceWithItems.remittance_number}`,
+        firm_id: remittanceWithItems.firm_id,
+        premise_id: remittanceWithItems.premise_id,
+        lot_id: remittanceWithItems.depot_id,
+        document_reference: remittanceWithItems.remittance_number,
+        remittance_id: remittanceId,
+        purchase_order_id: remittanceWithItems.purchase_order_id,
+        invoice_id: remittanceWithItems.invoice_id,
+        batch_number: item.batch_number || original?.batch_number || null,
       });
-      
-      if (rpcResult.error) {
-        // Si el error es que la función no existe, intentar actualización directa
-        if (rpcResult.error.message && (
-          rpcResult.error.message.includes('function') || 
-          rpcResult.error.message.includes('does not exist') ||
-          rpcResult.error.message.includes('not found')
-        )) {
-          throw new Error('RPC function not available');
-        }
-        // Otro tipo de error de la función RPC
-        throw rpcResult.error;
-      }
-      
-      if (rpcResult.data && rpcResult.data.length > 0) {
-        // La función RPC retorna TABLE(result JSON), así que el resultado está en result
-        let resultData = rpcResult.data[0];
-        
-        // Si tiene la propiedad 'result', extraer el JSON
-        if (resultData.result) {
-          // Si result es string, parsearlo
-          if (typeof resultData.result === 'string') {
-            data = JSON.parse(resultData.result);
-          } else {
-            // Si ya es objeto, usarlo directamente
-            data = resultData.result;
-          }
-        } else {
-          // Si no tiene 'result', usar el objeto completo
-          data = resultData;
-        }
-        
-        error = null;
-        console.log('✅ Remito actualizado usando función RPC');
-      } else {
-        // La función no retornó datos, obtener el remito actualizado manualmente
-        const fetchResult = await supabase
-          .from('remittances')
-          .select()
-          .eq('id', remittanceId)
-          .single();
-        
-        data = fetchResult.data;
-        error = fetchResult.error;
-      }
-    } catch (rpcError) {
-      // RPC no disponible o falló, usar actualización directa
-      console.warn('Función RPC no disponible, usando actualización directa:', rpcError.message);
-      
-      // Intentar actualización directa (puede fallar por el trigger)
-      const updateResult = await supabase
-        .from('remittances')
-        .update({
-          status: finalStatus,
-          received_by: receivedBy,
-          received_date: new Date().toISOString().split('T')[0],
-          updated_at: new Date().toISOString()
-        })
-        .eq('id', remittanceId)
-        .select()
-        .single();
-      
-      data = updateResult.data;
-      error = updateResult.error;
-      
-      // Si el error es sobre cancellation_reason, proporcionar instrucciones claras
-      if (error && error.message && error.message.includes('cancellation_reason')) {
-        const errorMsg = `
-❌ Error en trigger de base de datos
-
-El trigger está intentando acceder al campo 'cancellation_reason' que no existe en la tabla 'remittances'.
-
-SOLUCIÓN:
-1. Ve al SQL Editor de Supabase
-2. Ejecuta la función SQL del archivo 'fix_remittance_trigger.sql' que se creó en el proyecto
-3. O corrige el trigger manualmente para que no referencie 'cancellation_reason'
-
-El archivo fix_remittance_trigger.sql contiene el SQL necesario para crear una función RPC
-que actualiza los remitos sin el problema del trigger.
-        `.trim();
-        
-        console.error(errorMsg);
-        throw new Error('Error en trigger: cancellation_reason no existe. Ver fix_remittance_trigger.sql para la solución.');
-      }
     }
-
-    if (error) throw error;
 
     // 3. Filtrar SOLO items que fueron originalmente sin insumo Y fueron recibidos con cantidad > 0
     // IMPORTANTE: Usar el array 'items' pasado como parámetro que contiene las cantidades ACTUALIZADAS
     // Mapear items recibidos con cantidad > 0, incluyendo CANTIDAD ACTUALIZADA
     const itemsRecibidosMap = new Map(
       items
-        .filter(item => item.quantity_received > 0)
-        .map(item => [item.id, item])
+        .filter((item) => item.quantity_received > 0)
+        .map((item) => [item.id, item]),
     );
 
     // Filtrar items originales sin insumo que fueron realmente recibidos
     // ACTUALIZADO: Incluir cantidad_received correcta del array 'items'
     const itemsNeedingCreation = (originalItemsWithoutInput || [])
-      .filter(item => itemsRecibidosMap.has(item.id))
-      .map(item => ({
+      .filter((item) => itemsRecibidosMap.has(item.id))
+      .map((item) => ({
         ...item,
         // ACTUALIZAR quantity_received con el valor CORRECTO del array 'items'
-        quantity_received: itemsRecibidosMap.get(item.id).quantity_received
+        quantity_received: itemsRecibidosMap.get(item.id).quantity_received,
+        batch_number:
+          itemsRecibidosMap.get(item.id).batch_number ||
+          item.batch_number ||
+          null,
+        batch_expiry_date:
+          itemsRecibidosMap.get(item.id).batch_expiry_date ||
+          item.batch_expiry_date ||
+          null,
+        category:
+          itemsRecibidosMap.get(item.id).category || item.category || null,
       }));
 
-    console.log('✅ [recibirRemitoParciamente] Items que necesitan crear insumo:', itemsNeedingCreation.map(i => ({
-      id: i.id,
-      description: i.item_description,
-      quantity: i.quantity_received,
-      unit: i.unit
-    })));
+    console.log(
+      "✅ [recibirRemitoParciamente] Items que necesitan crear insumo:",
+      itemsNeedingCreation.map((i) => ({
+        id: i.id,
+        description: i.item_description,
+        quantity: i.quantity_received,
+        unit: i.unit,
+      })),
+    );
 
     return {
       ...data,
-      itemsNeedingInputCreation: itemsNeedingCreation
+      itemsNeedingInputCreation: itemsNeedingCreation,
     };
   } catch (error) {
-    console.error('Error en recibirRemitoParciamente:', error);
+    console.error("Error en recibirRemitoParciamente:", error);
     throw error;
   }
 }
@@ -625,19 +679,19 @@ que actualiza los remitos sin el problema del trigger.
  */
 export async function actualizarItemRemito(itemId, updates) {
   try {
-    if (!itemId) throw new Error('itemId es requerido');
+    if (!itemId) throw new Error("itemId es requerido");
 
     const { data, error } = await supabase
-      .from('remittance_items')
+      .from("remittance_items")
       .update(updates)
-      .eq('id', itemId)
+      .eq("id", itemId)
       .select()
       .single();
 
     if (error) throw error;
     return data;
   } catch (error) {
-    console.error('Error en actualizarItemRemito:', error);
+    console.error("Error en actualizarItemRemito:", error);
     throw error;
   }
 }
@@ -650,19 +704,20 @@ export async function actualizarItemRemito(itemId, updates) {
  */
 export async function vincularInputAlItem(itemId, inputId) {
   const updated = await actualizarItemRemito(itemId, { input_id: inputId });
-  
+
   // Verificar si el remito necesita cambiar a 'received' después de vincular
   // Obtener el remito y sus items
   const { data: item } = await supabase
-    .from('remittance_items')
-    .select('remittance_id')
-    .eq('id', itemId)
+    .from("remittance_items")
+    .select("remittance_id")
+    .eq("id", itemId)
     .single();
-  
+
   if (item?.remittance_id) {
     const { data: remittance } = await supabase
-      .from('remittances')
-      .select(`
+      .from("remittances")
+      .select(
+        `
         id,
         status,
         items:remittance_items(
@@ -671,27 +726,31 @@ export async function vincularInputAlItem(itemId, inputId) {
           quantity_received,
           input_id
         )
-      `)
-      .eq('id', item.remittance_id)
+      `,
+      )
+      .eq("id", item.remittance_id)
       .single();
-    
-    if (remittance && remittance.status === 'partially_received') {
+
+    if (remittance && remittance.status === "partially_received") {
       // Verificar si todos los items tienen input_id y están recibidos
-      const allItemsHaveInput = remittance.items.every(i => i.input_id !== null);
-      const allItemsReceived = remittance.items.every(
-        i => i.quantity_received >= (i.quantity_ordered || 0)
+      const allItemsHaveInput = remittance.items.every(
+        (i) => i.input_id !== null,
       );
-      
+      const allItemsReceived = remittance.items.every(
+        (i) => i.quantity_received >= (i.quantity_ordered || 0),
+      );
+
       if (allItemsHaveInput && allItemsReceived) {
-        // Cambiar a 'received' para que el trigger se ejecute
-        await supabase
-          .from('remittances')
-          .update({ status: 'received' })
-          .eq('id', item.remittance_id);
+        await actualizarRemitoSinTrigger({
+          remittanceId: item.remittance_id,
+          status: "received",
+          receivedBy: "sistema",
+          receivedDate: new Date().toISOString().split("T")[0],
+        });
       }
     }
   }
-  
+
   return updated;
 }
 
@@ -703,31 +762,31 @@ export async function vincularInputAlItem(itemId, inputId) {
 export async function actualizarItemsRecibidos(itemsUpdates) {
   try {
     if (!itemsUpdates || itemsUpdates.length === 0) {
-      throw new Error('itemsUpdates es requerido');
+      throw new Error("itemsUpdates es requerido");
     }
 
-    const promises = itemsUpdates.map(item =>
+    const promises = itemsUpdates.map((item) =>
       supabase
-        .from('remittance_items')
+        .from("remittance_items")
         .update({
           quantity_received: item.quantity_received,
-          condition: item.condition || 'good',
-          notes: item.notes || null
+          condition: item.condition || "good",
+          notes: item.notes || null,
         })
-        .eq('id', item.id)
+        .eq("id", item.id),
     );
 
     const results = await Promise.all(promises);
 
     // Verificar errores
-    const errors = results.filter(r => r.error);
+    const errors = results.filter((r) => r.error);
     if (errors.length > 0) {
       throw new Error(`Error actualizando ${errors.length} ítems`);
     }
 
     return true;
   } catch (error) {
-    console.error('Error en actualizarItemsRecibidos:', error);
+    console.error("Error en actualizarItemsRecibidos:", error);
     throw error;
   }
 }
@@ -740,20 +799,20 @@ export async function actualizarItemsRecibidos(itemsUpdates) {
  */
 export async function vincularItemAInsumo(remittanceItemId, inputId) {
   try {
-    if (!remittanceItemId) throw new Error('remittanceItemId es requerido');
-    if (!inputId) throw new Error('inputId es requerido');
+    if (!remittanceItemId) throw new Error("remittanceItemId es requerido");
+    if (!inputId) throw new Error("inputId es requerido");
 
     const { data, error } = await supabase
-      .from('remittance_items')
+      .from("remittance_items")
       .update({ input_id: inputId })
-      .eq('id', remittanceItemId)
+      .eq("id", remittanceItemId)
       .select()
       .single();
 
     if (error) throw error;
     return data;
   } catch (error) {
-    console.error('Error en vincularItemAInsumo:', error);
+    console.error("Error en vincularItemAInsumo:", error);
     throw error;
   }
 }
@@ -765,19 +824,19 @@ export async function vincularItemAInsumo(remittanceItemId, inputId) {
  */
 export async function desvinculatItemDelInsumo(remittanceItemId) {
   try {
-    if (!remittanceItemId) throw new Error('remittanceItemId es requerido');
+    if (!remittanceItemId) throw new Error("remittanceItemId es requerido");
 
     const { data, error } = await supabase
-      .from('remittance_items')
+      .from("remittance_items")
       .update({ input_id: null })
-      .eq('id', remittanceItemId)
+      .eq("id", remittanceItemId)
       .select()
       .single();
 
     if (error) throw error;
     return data;
   } catch (error) {
-    console.error('Error en desvinculatItemDelInsumo:', error);
+    console.error("Error en desvinculatItemDelInsumo:", error);
     throw error;
   }
 }
@@ -793,26 +852,29 @@ export async function desvinculatItemDelInsumo(remittanceItemId) {
  */
 export async function obtenerEstadisticasRemitos(firmId) {
   try {
-    if (!firmId) throw new Error('firmId es requerido');
+    if (!firmId) throw new Error("firmId es requerido");
 
     const { data, error } = await supabase
-      .from('remittances')
-      .select('status')
-      .eq('firm_id', firmId);
+      .from("remittances")
+      .select("status")
+      .eq("firm_id", firmId);
 
     if (error) throw error;
 
     const stats = {
       total: data.length,
-      in_transit: data.filter(r => r.status === 'in_transit').length,
-      received: data.filter(r => r.status === 'received').length,
-      partially_received: data.filter(r => r.status === 'partially_received').length,
-      cancelled: data.filter(r => r.status === 'cancelled').length
+      in_transit: data.filter((r) =>
+        ["in_transit", "pending", "sent"].includes(r.status),
+      ).length,
+      received: data.filter((r) => r.status === "received").length,
+      partially_received: data.filter((r) => r.status === "partially_received")
+        .length,
+      cancelled: data.filter((r) => r.status === "cancelled").length,
     };
 
     return stats;
   } catch (error) {
-    console.error('Error en obtenerEstadisticasRemitos:', error);
+    console.error("Error en obtenerEstadisticasRemitos:", error);
     throw error;
   }
 }
@@ -824,19 +886,19 @@ export async function obtenerEstadisticasRemitos(firmId) {
  */
 export async function obtenerRemitosPorProveedor(firmId) {
   try {
-    if (!firmId) throw new Error('firmId es requerido');
+    if (!firmId) throw new Error("firmId es requerido");
 
     const { data, error } = await supabase
-      .from('remittances')
-      .select('supplier_name, status')
-      .eq('firm_id', firmId)
-      .eq('status', 'received');
+      .from("remittances")
+      .select("supplier_name, status")
+      .eq("firm_id", firmId)
+      .eq("status", "received");
 
     if (error) throw error;
 
     // Agrupar por proveedor
     const bySupplier = {};
-    data.forEach(r => {
+    data.forEach((r) => {
       if (!bySupplier[r.supplier_name]) {
         bySupplier[r.supplier_name] = 0;
       }
@@ -845,7 +907,7 @@ export async function obtenerRemitosPorProveedor(firmId) {
 
     return bySupplier;
   } catch (error) {
-    console.error('Error en obtenerRemitosPorProveedor:', error);
+    console.error("Error en obtenerRemitosPorProveedor:", error);
     throw error;
   }
 }
@@ -857,24 +919,26 @@ export async function obtenerRemitosPorProveedor(firmId) {
  */
 export async function obtenerRemitosPorDeposito(firmId) {
   try {
-    if (!firmId) throw new Error('firmId es requerido');
+    if (!firmId) throw new Error("firmId es requerido");
 
     const { data, error } = await supabase
-      .from('remittances')
-      .select(`
+      .from("remittances")
+      .select(
+        `
         depot_id,
         depot:lots(id, name),
         status
-      `)
-      .eq('firm_id', firmId)
-      .eq('status', 'received');
+      `,
+      )
+      .eq("firm_id", firmId)
+      .eq("status", "received");
 
     if (error) throw error;
 
     // Agrupar por depósito
     const byDepot = {};
-    data.forEach(r => {
-      const depotName = r.depot?.name || 'Sin depósito';
+    data.forEach((r) => {
+      const depotName = r.depot?.name || "Sin depósito";
       if (!byDepot[depotName]) {
         byDepot[depotName] = 0;
       }
@@ -883,7 +947,7 @@ export async function obtenerRemitosPorDeposito(firmId) {
 
     return byDepot;
   } catch (error) {
-    console.error('Error en obtenerRemitosPorDeposito:', error);
+    console.error("Error en obtenerRemitosPorDeposito:", error);
     throw error;
   }
 }
@@ -897,22 +961,22 @@ export async function obtenerRemitosPorDeposito(firmId) {
  */
 export async function obtenerRemitosPorRangoFechas(firmId, dateFrom, dateTo) {
   try {
-    if (!firmId) throw new Error('firmId es requerido');
-    if (!dateFrom) throw new Error('dateFrom es requerido');
-    if (!dateTo) throw new Error('dateTo es requerido');
+    if (!firmId) throw new Error("firmId es requerido");
+    if (!dateFrom) throw new Error("dateFrom es requerido");
+    if (!dateTo) throw new Error("dateTo es requerido");
 
     const { data, error } = await supabase
-      .from('remittances')
-      .select('*')
-      .eq('firm_id', firmId)
-      .gte('remittance_date', dateFrom)
-      .lte('remittance_date', dateTo)
-      .order('remittance_date', { ascending: false });
+      .from("remittances")
+      .select("*")
+      .eq("firm_id", firmId)
+      .gte("remittance_date", dateFrom)
+      .lte("remittance_date", dateTo)
+      .order("remittance_date", { ascending: false });
 
     if (error) throw error;
     return { data: data || [] };
   } catch (error) {
-    console.error('Error en obtenerRemitosPorRangoFechas:', error);
+    console.error("Error en obtenerRemitosPorRangoFechas:", error);
     throw error;
   }
 }
@@ -924,21 +988,23 @@ export async function obtenerRemitosPorRangoFechas(firmId, dateFrom, dateTo) {
  */
 export async function obtenerItemsSinVincular(firmId) {
   try {
-    if (!firmId) throw new Error('firmId es requerido');
+    if (!firmId) throw new Error("firmId es requerido");
 
     const { data, error } = await supabase
-      .from('remittance_items')
-      .select(`
+      .from("remittance_items")
+      .select(
+        `
         *,
         remittance:remittances(id, remittance_number, supplier_name)
-      `)
-      .eq('remittance.firm_id', firmId)
-      .is('input_id', null);
+      `,
+      )
+      .eq("remittance.firm_id", firmId)
+      .is("input_id", null);
 
     if (error) throw error;
     return { data: data || [] };
   } catch (error) {
-    console.error('Error en obtenerItemsSinVincular:', error);
+    console.error("Error en obtenerItemsSinVincular:", error);
     throw error;
   }
 }
@@ -955,28 +1021,33 @@ export async function obtenerItemsSinVincular(firmId) {
  * @param {string} supplierRut - RUT del proveedor
  * @returns {Object} { isDuplicate: boolean, duplicateId?: string }
  */
-export async function validarDuplicado(firmId, remittanceNumber, remittanceDate, supplierRut) {
+export async function validarDuplicado(
+  firmId,
+  remittanceNumber,
+  remittanceDate,
+  supplierRut,
+) {
   try {
-    if (!firmId) throw new Error('firmId es requerido');
+    if (!firmId) throw new Error("firmId es requerido");
 
     const { data, error } = await supabase
-      .from('remittances')
-      .select('id')
-      .eq('firm_id', firmId)
-      .eq('remittance_number', remittanceNumber)
-      .eq('remittance_date', remittanceDate)
-      .eq('supplier_rut', supplierRut)
-      .neq('status', 'cancelled')
+      .from("remittances")
+      .select("id")
+      .eq("firm_id", firmId)
+      .eq("remittance_number", remittanceNumber)
+      .eq("remittance_date", remittanceDate)
+      .eq("supplier_rut", supplierRut)
+      .neq("status", "cancelled")
       .limit(1);
 
     if (error) throw error;
 
     return {
       isDuplicate: data.length > 0,
-      duplicateId: data.length > 0 ? data[0].id : null
+      duplicateId: data.length > 0 ? data[0].id : null,
     };
   } catch (error) {
-    console.error('Error en validarDuplicado:', error);
+    console.error("Error en validarDuplicado:", error);
     throw error;
   }
 }
@@ -995,7 +1066,7 @@ export async function validarDuplicado(firmId, remittanceNumber, remittanceDate,
  */
 export function esRemitoInmutable(remito) {
   if (!remito || !remito.status) return false;
-  return ['received', 'partially_received'].includes(remito.status);
+  return ["received", "partially_received"].includes(remito.status);
 }
 
 /**
@@ -1009,43 +1080,44 @@ export function esRemitoInmutable(remito) {
  */
 export async function actualizarRemitoSeguro(remittanceId, updates) {
   try {
-    if (!remittanceId) throw new Error('remittanceId es requerido');
+    if (!remittanceId) throw new Error("remittanceId es requerido");
 
     // PASO 1: Obtener remito actual
     const { data: remitoActual, error: fetchError } = await supabase
-      .from('remittances')
-      .select('*')
-      .eq('id', remittanceId)
+      .from("remittances")
+      .select("*")
+      .eq("id", remittanceId)
       .single();
 
-    if (fetchError) throw new Error(`Error al obtener remito: ${fetchError.message}`);
+    if (fetchError)
+      throw new Error(`Error al obtener remito: ${fetchError.message}`);
 
     // PASO 2: Validar inmutabilidad
     if (esRemitoInmutable(remitoActual)) {
       // Solo permitir cambio a 'cancelled' con motivo
-      if (updates.status === 'cancelled' && updates.cancellation_reason) {
+      if (updates.status === "cancelled" && updates.cancellation_reason) {
         // Permitir cancelación
-        console.log('✅ Cancelación permitida para remito:', remitoActual.id);
+        console.log("✅ Cancelación permitida para remito:", remitoActual.id);
       } else {
         throw new Error(
           `No se puede modificar un remito con estado "${remitoActual.status}". ` +
-          'Los remitos recibidos son inmutables. Solo se permite cancelación con motivo obligatorio.'
+            "Los remitos recibidos son inmutables. Solo se permite cancelación con motivo obligatorio.",
         );
       }
     }
 
     // PASO 3: Ejecutar update con triggers de auditoría automáticos
     const { data, error } = await supabase
-      .from('remittances')
+      .from("remittances")
       .update({ ...updates, updated_at: new Date().toISOString() })
-      .eq('id', remittanceId)
+      .eq("id", remittanceId)
       .select()
       .single();
 
     if (error) throw error;
     return data;
   } catch (error) {
-    console.error('Error en actualizarRemitoSeguro:', error);
+    console.error("Error en actualizarRemitoSeguro:", error);
     throw error;
   }
 }
@@ -1060,35 +1132,36 @@ export async function actualizarRemitoSeguro(remittanceId, updates) {
  */
 export async function eliminarRemito(remittanceId) {
   try {
-    if (!remittanceId) throw new Error('remittanceId es requerido');
+    if (!remittanceId) throw new Error("remittanceId es requerido");
 
     // PASO 1: Obtener remito
     const { data: remito, error: fetchError } = await supabase
-      .from('remittances')
-      .select('*')
-      .eq('id', remittanceId)
+      .from("remittances")
+      .select("*")
+      .eq("id", remittanceId)
       .single();
 
-    if (fetchError) throw new Error(`Error al obtener remito: ${fetchError.message}`);
+    if (fetchError)
+      throw new Error(`Error al obtener remito: ${fetchError.message}`);
 
     // PASO 2: Validar que no esté recibido
     if (esRemitoInmutable(remito)) {
       throw new Error(
         `No se puede eliminar un remito con estado "${remito.status}". ` +
-        'Los remitos recibidos son inmutables. Para cancelar, use la función cancelarRemito().'
+          "Los remitos recibidos son inmutables. Para cancelar, use la función cancelarRemito().",
       );
     }
 
     // PASO 3: Eliminar (BEFORE trigger verificará estado nuevamente)
     const { error } = await supabase
-      .from('remittances')
+      .from("remittances")
       .delete()
-      .eq('id', remittanceId);
+      .eq("id", remittanceId);
 
     if (error) throw error;
-    console.log('✅ Remito eliminado:', remittanceId);
+    console.log("✅ Remito eliminado:", remittanceId);
   } catch (error) {
-    console.error('Error en eliminarRemito:', error);
+    console.error("Error en eliminarRemito:", error);
     throw error;
   }
 }
@@ -1102,18 +1175,18 @@ export async function eliminarRemito(remittanceId) {
  */
 export async function obtenerAuditoriaRemito(remittanceId) {
   try {
-    if (!remittanceId) throw new Error('remittanceId es requerido');
+    if (!remittanceId) throw new Error("remittanceId es requerido");
 
     const { data, error } = await supabase
-      .from('audit')
-      .select('*')
-      .eq('remittance_id', remittanceId)
-      .order('created_at', { ascending: true });
+      .from("audit")
+      .select("*")
+      .eq("remittance_id", remittanceId)
+      .order("created_at", { ascending: true });
 
     if (error) throw new Error(`Error al obtener auditoría: ${error.message}`);
     return data || [];
   } catch (error) {
-    console.error('Error en obtenerAuditoriaRemito:', error);
+    console.error("Error en obtenerAuditoriaRemito:", error);
     throw error;
   }
 }
@@ -1126,22 +1199,24 @@ export async function obtenerAuditoriaRemito(remittanceId) {
  */
 export async function obtenerRemitosPendientesDeResolucion(firmId, days = 30) {
   try {
-    if (!firmId) throw new Error('firmId es requerido');
+    if (!firmId) throw new Error("firmId es requerido");
 
-    const daysAgo = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().split('T')[0];
+    const daysAgo = new Date(Date.now() - days * 24 * 60 * 60 * 1000)
+      .toISOString()
+      .split("T")[0];
 
     const { data, error } = await supabase
-      .from('remittances')
-      .select('*')
-      .eq('firm_id', firmId)
-      .eq('status', 'in_transit')
-      .lte('remittance_date', daysAgo)
-      .order('remittance_date', { ascending: true });
+      .from("remittances")
+      .select("*")
+      .eq("firm_id", firmId)
+      .in("status", ["in_transit", "pending", "sent"])
+      .lte("remittance_date", daysAgo)
+      .order("remittance_date", { ascending: true });
 
     if (error) throw error;
     return { data: data || [] };
   } catch (error) {
-    console.error('Error en obtenerRemitosPendientesDeResolucion:', error);
+    console.error("Error en obtenerRemitosPendientesDeResolucion:", error);
     throw error;
   }
 }

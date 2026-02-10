@@ -25,35 +25,20 @@ import { AlertCircle, Edit, Trash2, Eye, Plus } from 'lucide-react';
 import { toast } from 'sonner';
 
 const statusBadgeColors = {
-  DRAFT: 'bg-gray-200 text-gray-800',
-  REGISTERED: 'bg-blue-200 text-blue-800',
-  APPROVED: 'bg-green-200 text-green-800',
-  PAID_PARTIAL: 'bg-yellow-200 text-yellow-800',
-  PAID: 'bg-green-700 text-white',
-  CANCELLED: 'bg-red-200 text-red-800'
+  pendiente: 'bg-gray-200 text-gray-800',
+  completada: 'bg-green-200 text-green-800',
+  cancelada: 'bg-red-200 text-red-800'
 };
 
-// Etiquetas estándar para el filtro (sin considerar payment_terms)
+// Etiquetas para los nuevos estados
 const statusLabels = {
-  DRAFT: 'Borrador',
-  REGISTERED: 'Registrada',
-  APPROVED: 'Crédito',
-  PAID_PARTIAL: 'Pagada Parcial',
-  PAID: 'Contado',
-  CANCELLED: 'Anulada'
+  pendiente: 'Pendiente',
+  completada: 'Completada',
+  cancelada: 'Cancelada'
 };
 
-// Función para obtener la etiqueta del estado considerando payment_terms
+// Función para obtener la etiqueta del estado
 const getStatusLabel = (expense) => {
-  // Si es contado y está pagada, mostrar "Contado"
-  if (expense.status === 'PAID' && expense.payment_terms === 'contado') {
-    return 'Contado';
-  }
-  // Si es aprobada y no es contado, mostrar "Crédito"
-  if (expense.status === 'APPROVED' && expense.payment_terms !== 'contado') {
-    return 'Crédito';
-  }
-  // Para otros casos, usar las etiquetas estándar
   return statusLabels[expense.status] || expense.status;
 };
 
@@ -84,7 +69,7 @@ export function ExpenseListView({ firmId, onAdd = () => {}, onSelectForPayment =
   });
 
   const categories = ['Insumos', 'Servicios', 'Mantenimiento', 'Impuestos', 'Otros gastos'];
-  const statuses = ['DRAFT', 'REGISTERED', 'APPROVED', 'PAID_PARTIAL', 'PAID', 'CANCELLED'];
+  const statuses = ['pendiente', 'completada', 'cancelada'];
 
   /**
    * Cargar facturas al montar o cambiar firma
@@ -368,7 +353,7 @@ export function ExpenseListView({ firmId, onAdd = () => {}, onSelectForPayment =
                         <Eye size={16} />
                       </button>
 
-                      {['REGISTERED'].includes(expense.status) && (
+                      {['pendiente'].includes(expense.status) && (
                         <button
                           className="text-amber-600 hover:text-amber-800 p-1 rounded hover:bg-amber-50"
                           onClick={() => handleOpenModal(expense)}
@@ -378,7 +363,7 @@ export function ExpenseListView({ firmId, onAdd = () => {}, onSelectForPayment =
                         </button>
                       )}
 
-                      {['REGISTERED'].includes(expense.status) && (
+                      {['pendiente'].includes(expense.status) && (
                         <button
                           className="text-green-600 hover:text-green-800 p-1 rounded hover:bg-green-50"
                           onClick={() => handleApprove(expense)}
@@ -388,7 +373,7 @@ export function ExpenseListView({ firmId, onAdd = () => {}, onSelectForPayment =
                         </button>
                       )}
 
-                      {!['PAID', 'CANCELLED'].includes(expense.status) && (
+                      {expense.status !== 'cancelada' && (
                         <button
                           className="text-red-600 hover:text-red-800 p-1 rounded hover:bg-red-50"
                           onClick={() => handleOpenCancelModal(expense)}
