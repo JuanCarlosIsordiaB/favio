@@ -185,6 +185,30 @@ export function PaymentOrderFormModal({
   }, [availableExpenses, loadedExpenses, formData.planned_payment_date]);
 
   /**
+   * Sincronizar moneda del formulario con la de las facturas seleccionadas.
+   * Si todas las facturas seleccionadas tienen la misma moneda, se usa esa.
+   * Si hay mezcla o ninguna seleccionada, se mantiene la actual (o UYU por defecto).
+   */
+  useEffect(() => {
+    const expensesToUse =
+      availableExpenses.length > 0 ? availableExpenses : loadedExpenses;
+    const selectedIds = Object.entries(selectedExpenses)
+      .filter(([, sel]) => sel)
+      .map(([id]) => id);
+    if (selectedIds.length === 0) return;
+    const currencies = [...new Set(
+      selectedIds
+        .map((id) => expensesToUse.find((e) => e.id === id)?.currency)
+        .filter(Boolean),
+    )];
+    if (currencies.length === 1) {
+      setFormData((prev) =>
+        prev.currency === currencies[0] ? prev : { ...prev, currency: currencies[0] },
+      );
+    }
+  }, [selectedExpenses, availableExpenses, loadedExpenses]);
+
+  /**
    * Calcular monto total de la orden
    */
   const calculateTotalAmount = () => {
@@ -458,20 +482,25 @@ export function PaymentOrderFormModal({
                         </td>
                         <td className="px-4 py-3">
                           {selectedExpenses[expense.id] ? (
-                            <Input
-                              type="number"
-                              value={amountsByExpense[expense.id] || 0}
-                              onChange={(e) =>
-                                handleAmountChange(expense.id, e.target.value)
-                              }
-                              step="0.01"
-                              min="0"
-                              max={expense.balance}
-                              disabled={isLoading}
-                              className="w-full text-right"
-                              aria-invalid={!!errors[`amount_${expense.id}`]}
-                              data-testid="input-amount"
-                            />
+                            <div className="flex items-center gap-2 justify-end">
+                              <span className="text-sm text-gray-600 shrink-0">
+                                {expense.currency || "UYU"}
+                              </span>
+                              <Input
+                                type="number"
+                                value={amountsByExpense[expense.id] || 0}
+                                onChange={(e) =>
+                                  handleAmountChange(expense.id, e.target.value)
+                                }
+                                step="0.01"
+                                min="0"
+                                max={expense.balance}
+                                disabled={isLoading}
+                                className="w-full text-right max-w-[140px]"
+                                aria-invalid={!!errors[`amount_${expense.id}`]}
+                                data-testid="input-amount"
+                              />
+                            </div>
                           ) : (
                             <span className="text-gray-400">-</span>
                           )}
