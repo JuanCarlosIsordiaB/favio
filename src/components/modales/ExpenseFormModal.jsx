@@ -88,7 +88,6 @@ export function ExpenseFormModal({
     { value: 'credito', label: 'Crédito' },
     { value: 'contado', label: 'Contado' }
   ];
-  const currencies = ['UYU', 'USD'];
   const units = ['Unidades', 'Kilos', 'Litros', 'Hectáreas', 'Horas', 'Servicios'];
 
   /** Símbolo de moneda para mostrar en precios (pesos/dólares) */
@@ -571,7 +570,7 @@ export function ExpenseFormModal({
           {/* Datos de Factura */}
           <div>
             <h3 className="font-semibold mb-3">Datos de la Factura</h3>
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-2 sm:grid-cols-4 gap-4">
               <div>
                 <Label htmlFor="invoice_series">Serie *</Label>
                 <Input
@@ -623,6 +622,29 @@ export function ExpenseFormModal({
                   disabled={isLoading}
                   data-testid="input-date"
                 />
+              </div>
+
+              <div>
+                <Label htmlFor="currency">Moneda *</Label>
+                <Select
+                  value={formData.currency}
+                  onValueChange={(value) => handleSelectChange('currency', value)}
+                  disabled={isLoading}
+                >
+                  <SelectTrigger id="currency" aria-invalid={!!errors.currency} data-testid="select-currency">
+                    <SelectValue placeholder="Moneda" />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="UYU">Pesos (UYU)</SelectItem>
+                    <SelectItem value="USD">Dólares (USD)</SelectItem>
+                  </SelectContent>
+                </Select>
+                {errors.currency && (
+                  <div className="flex items-center gap-1 mt-1 text-sm text-red-500">
+                    <AlertCircle size={14} />
+                    {errors.currency}
+                  </div>
+                )}
               </div>
             </div>
           </div>
@@ -962,20 +984,9 @@ export function ExpenseFormModal({
               <div>
                 <Label>Total *</Label>
                 <div className="flex gap-2 items-center">
-                  <Select
-                    value={formData.currency}
-                    onValueChange={(value) => handleSelectChange('currency', value)}
-                    disabled={isLoading}
-                  >
-                    <SelectTrigger className="w-16">
-                      <SelectValue />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {currencies.map(curr => (
-                        <SelectItem key={curr} value={curr}>{curr}</SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
+                  <span className="text-sm font-medium text-slate-600 shrink-0 min-w-[4rem]">
+                    {formData.currency === 'USD' ? 'USD' : 'UYU'}
+                  </span>
                   <Input
                     type="number"
                     value={formData.total_amount.toFixed(2)}
