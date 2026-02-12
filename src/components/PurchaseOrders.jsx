@@ -294,8 +294,6 @@ export default function PurchaseOrders({ firmId, premiseId }) {
         .insert(itemsData);
       if (itemsError) throw itemsError;
 
-      toast.success(editingOrder ? 'Orden actualizada' : 'Orden creada');
-
       // Preparar metadata para auditoría
       const metadata = {
         order_number: orderNumber,
@@ -326,6 +324,46 @@ export default function PurchaseOrders({ firmId, premiseId }) {
         referencia: orderId,
         metadata: metadata
       }).catch(err => console.warn('Error en auditoría:', err));
+
+      // Si la orden se guardó con estado "aprobada", crear factura pendiente (igual que al aprobar desde pendiente)
+      const savedStatus = formData.status;
+      let successMsg = editingOrder ? 'Orden actualizada' : 'Orden creada';
+      if (savedStatus === 'aprobada') {
+        try {
+          const { data: existingInvoice } = await supabase
+            .from('expenses')
+            .select('id')
+            .eq('purchase_order_id', orderId)
+            .or('is_auto_generated.is.null,is_auto_generated.eq.false')
+            .limit(1)
+            .maybeSingle();
+
+          if (!existingInvoice) {
+            const { items: invItems, error: invError } =
+              await createInvoiceFromPurchaseOrder(
+                orderId,
+                {
+                  invoice_date: new Date().toISOString().split('T')[0],
+                  payment_condition: 'credito'
+                },
+                user?.id
+              );
+            if (invError) throw invError;
+            const itemCount = invItems?.length ?? 0;
+            successMsg = editingOrder
+              ? 'Orden actualizada. Factura pendiente creada.'
+              : `Orden creada. Factura pendiente creada${itemCount ? ` (${itemCount} ítem(s))` : ''}.`;
+          }
+        } catch (invoiceError) {
+          console.error('Error creando factura pendiente:', invoiceError);
+          if (!editingOrder) {
+            toast.warning(
+              'Orden creada, pero no se pudo crear la factura pendiente. Puede crearla desde la orden.'
+            );
+          }
+        }
+      }
+      toast.success(successMsg);
 
       setShowModal(false);
       resetForm();
@@ -605,6 +643,42 @@ export default function PurchaseOrders({ firmId, premiseId }) {
 
       if (updateError) throw updateError;
 
+      // ===== PHASE 5b: CREAR FACTURA PENDIENTE AL APROBAR =====
+      // Al aprobar la OC se crea automáticamente una factura pendiente (si no existe ya)
+      let invoiceCreated = false;
+      let invoiceItemCount = 0;
+      if (newStatus === 'aprobada' && oldStatus === 'pendiente') {
+        try {
+          const { data: existingInvoice } = await supabase
+            .from('expenses')
+            .select('id')
+            .eq('purchase_order_id', id)
+            .or('is_auto_generated.is.null,is_auto_generated.eq.false')
+            .limit(1)
+            .maybeSingle();
+
+          if (!existingInvoice) {
+            const { items: invItems, error: invError } =
+              await createInvoiceFromPurchaseOrder(
+                id,
+                {
+                  invoice_date: new Date().toISOString().split('T')[0],
+                  payment_condition: 'credito'
+                },
+                user?.id
+              );
+            if (invError) throw invError;
+            invoiceCreated = true;
+            invoiceItemCount = invItems?.length ?? 0;
+          }
+        } catch (invoiceError) {
+          console.error('Error creando factura pendiente:', invoiceError);
+          toast.warning(
+            'Orden aprobada, pero no se pudo crear la factura pendiente. Puede crearla manualmente.'
+          );
+        }
+      }
+
       // ===== PHASE 6: COUNT SYNCHRONIZED EXPENSES =====
       // 6. Contar expenses que fueron sincronizadas (el trigger ya las actualizó)
       const { count: expenseCount, error: countError } = await supabase
@@ -624,6 +698,9 @@ export default function PurchaseOrders({ firmId, premiseId }) {
       };
 
       let successMsg = `Orden ${statusLabels[newStatus] || newStatus}`;
+      if (newStatus === 'aprobada' && invoiceCreated) {
+        successMsg += `. Factura pendiente creada${invoiceItemCount ? ` (${invoiceItemCount} ítem(s))` : ''}`;
+      }
       toast.success(successMsg);
 
       // ===== PHASE 8: AUDIT LOGGING =====

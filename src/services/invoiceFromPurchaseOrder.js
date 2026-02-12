@@ -10,6 +10,70 @@ import { supabase } from '../lib/supabase';
 import { crearRegistro } from './registros';
 
 /**
+ * Crea la factura con inserts directos (fallback cuando la función RPC no existe en la BD).
+ * Réplica la lógica de create_invoice_from_purchase_order.
+ */
+async function createInvoiceWithInserts(purchaseOrder, { invoiceDate, invoiceNumber, paymentCondition }) {
+  if (!['credito', 'contado'].includes(paymentCondition)) {
+    throw new Error(`Condición de pago inválida: ${paymentCondition}. Debe ser "credito" o "contado"`);
+  }
+
+  const po = purchaseOrder;
+  const concept = `Factura desde OC: ${po.order_number}`;
+  const description = `Factura generada automáticamente desde orden de compra ${po.order_number}`;
+
+  const expenseRow = {
+    firm_id: po.firm_id,
+    premise_id: po.premise_id ?? null,
+    purchase_order_id: po.id,
+    invoice_date: invoiceDate,
+    invoice_number: invoiceNumber ?? null,
+    invoice_series: null,
+    provider_name: po.supplier_name ?? null,
+    provider_rut: po.supplier_rut ?? null,
+    provider_phone: po.supplier_phone ?? null,
+    provider_email: po.supplier_email ?? null,
+    category: 'Insumos',
+    concept,
+    currency: 'UYU',
+    amount: 0,
+    status: 'pendiente',
+    payment_condition: paymentCondition,
+    description,
+    notes: null
+  };
+
+  const { data: inserted, error: insertExpError } = await supabase
+    .from('expenses')
+    .insert([expenseRow])
+    .select('id')
+    .single();
+
+  if (insertExpError) throw insertExpError;
+  const expenseId = inserted.id;
+
+  const items = po.purchase_order_items || [];
+  if (items.length > 0) {
+    const itemsRows = items.map((item) => ({
+      expense_id: expenseId,
+      purchase_order_item_id: item.id,
+      item_description: item.item_description?.trim() || 'Sin descripción',
+      category: item.category ?? null,
+      quantity: item.quantity ?? 0,
+      unit: item.unit ?? 'Unidades',
+      unit_price: 0,
+      subtotal: 0,
+      tax_amount: 0,
+      total: 0
+    }));
+    const { error: itemsError } = await supabase.from('expense_items').insert(itemsRows);
+    if (itemsError) throw itemsError;
+  }
+
+  return expenseId;
+}
+
+/**
  * Crear factura automáticamente desde una Orden de Compra
  * @param {string} purchaseOrderId - ID de la orden de compra
  * @param {Object} additionalData - Datos adicionales de la factura
@@ -43,18 +107,35 @@ export async function createInvoiceFromPurchaseOrder(
       );
     }
 
-    // 3. Usar función RPC para crear la factura (más seguro y consistente)
-    const { data: expenseId, error: rpcError } = await supabase.rpc(
+    const paymentCondition = additionalData.payment_condition || 'credito';
+    const invoiceDate = additionalData.invoice_date || new Date().toISOString().split('T')[0];
+    const invoiceNumber = additionalData.invoice_number || null;
+
+    // 3. Crear factura: intentar RPC; si no existe la función (PGRST202), crear con inserts
+    let expenseId = null;
+    const { data: rpcId, error: rpcError } = await supabase.rpc(
       'create_invoice_from_purchase_order',
       {
         p_purchase_order_id: purchaseOrderId,
-        p_invoice_date: additionalData.invoice_date || new Date().toISOString().split('T')[0],
-        p_invoice_number: additionalData.invoice_number || null,
-        p_payment_condition: additionalData.payment_condition || 'credito'
+        p_invoice_date: invoiceDate,
+        p_invoice_number: invoiceNumber,
+        p_payment_condition: paymentCondition
       }
     );
 
-    if (rpcError) throw rpcError;
+    if (rpcError) {
+      if (rpcError.code === 'PGRST202') {
+        // Función no existe en la BD: crear factura con inserts directos
+        expenseId = await createInvoiceWithInserts(
+          purchaseOrder,
+          { invoiceDate, invoiceNumber, paymentCondition }
+        );
+      } else {
+        throw rpcError;
+      }
+    } else {
+      expenseId = rpcId;
+    }
 
     // 4. Obtener la factura creada con sus items
     const { data: expense, error: expenseError } = await supabase

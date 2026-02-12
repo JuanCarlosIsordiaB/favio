@@ -1,3 +1,5 @@
+import { supabase } from '../lib/supabase';
+
 /**
  * Servicios CRUD para Remitos en Supabase
     const receivedAt = remittanceWithItems.received_date || new Date().toISOString().split("T")[0];
