@@ -1,4 +1,6 @@
 import { supabase } from '../lib/supabase';
+import { crearInsumo } from './inputs';
+import { registrarMovimiento } from './inputMovements';
 
 /**
  * Servicios CRUD para Remitos en Supabase
@@ -347,8 +349,90 @@ export async function crearRemito(remittanceData, items) {
       JSON.stringify(insertedItems, null, 2),
     );
 
-    // Retornar remito CON items incluidos para que aparezcan en el estado
-    return { ...newRemittance, items: insertedItems || [] };
+    // 3. Para cada ítem sin input_id, crear insumo automáticamente y vincularlo
+    const itemsInserted = insertedItems || [];
+    for (let i = 0; i < itemsInserted.length; i++) {
+      const insertedItem = itemsInserted[i];
+      const originalItem = items[i];
+      const hasInput = originalItem?.input_id?.trim?.() || originalItem?.input_id;
+      if (hasInput) continue;
+
+      const name =
+        (originalItem?.item_description || insertedItem?.item_description || "")
+          .trim() || `Insumo remito ${newRemittance.remittance_number}`;
+      const category =
+        (originalItem?.category || insertedItem?.category || "Insumos").trim() ||
+        "Insumos";
+      const unit =
+        (originalItem?.unit || insertedItem?.unit || "kg").trim() || "kg";
+
+      try {
+        const nuevoInsumo = await crearInsumo({
+          firm_id: newRemittance.firm_id,
+          premise_id: newRemittance.premise_id || remittanceData.premise_id || null,
+          name,
+          category,
+          unit,
+          current_stock: 0,
+          stock_status: "disponible",
+        });
+
+        await actualizarItemRemito(insertedItem.id, {
+          input_id: nuevoInsumo.id,
+        });
+
+        const qty =
+          Number(originalItem?.quantity_received ?? insertedItem?.quantity_received) ||
+          0;
+        if (qty > 0) {
+          await registrarMovimiento({
+            input_id: nuevoInsumo.id,
+            type: "entry",
+            quantity: qty,
+            date:
+              remittanceData.remittance_date ||
+              new Date().toISOString().split("T")[0],
+            description: `Ingreso por remito ${newRemittance.remittance_number}`,
+            firm_id: newRemittance.firm_id,
+            premise_id:
+              newRemittance.premise_id || remittanceData.premise_id || null,
+            lot_id: newRemittance.depot_id || remittanceData.depot_id || null,
+            document_reference: newRemittance.remittance_number || null,
+            remittance_id: newRemittance.id,
+            purchase_order_id:
+              newRemittance.purchase_order_id ||
+              remittanceData.purchase_order_id ||
+              null,
+            invoice_id: remittanceData.invoice_id || null,
+          });
+        }
+
+        console.log(
+          "✅ [crearRemito] Insumo creado y vinculado:",
+          nuevoInsumo.name,
+          "→ item",
+          insertedItem.id,
+        );
+      } catch (errInsumo) {
+        console.error(
+          "❌ [crearRemito] Error creando insumo para ítem:",
+          insertedItem.id,
+          errInsumo,
+        );
+        // No fallar todo el remito: el ítem queda sin insumo y se puede crear después al recibir
+      }
+    }
+
+    // Retornar remito CON items incluidos (con input_id actualizado si se crearon insumos)
+    const { data: itemsRefreshed } = await supabase
+      .from("remittance_items")
+      .select("*")
+      .eq("remittance_id", newRemittance.id);
+
+    return {
+      ...newRemittance,
+      items: itemsRefreshed ?? itemsInserted,
+    };
   } catch (error) {
     console.error("❌ Error en crearRemito:", error);
     throw error;
