@@ -39,6 +39,8 @@ export function ExpenseFormModal({
 
   const [formData, setFormData] = useState({
     firm_id: firmId,
+    premise_id: null,
+    purchase_order_id: null,
     invoice_series: '',
     invoice_number: '',
     invoice_date: new Date().toISOString().split('T')[0],
@@ -78,6 +80,8 @@ export function ExpenseFormModal({
   const [costCenters, setCostCenters] = useState([]);
   const [agriculturalWorks, setAgriculturalWorks] = useState([]);
   const [livestockWorks, setLivestockWorks] = useState([]);
+  const [purchaseOrders, setPurchaseOrders] = useState([]);
+  const [loadingOrder, setLoadingOrder] = useState(false);
   const categories = ['Insumos', 'Servicios', 'Mantenimiento', 'Impuestos', 'Otros gastos', 'Otra'];
   const [isCustomCategory, setIsCustomCategory] = useState(false);
   const paymentConditions = [
@@ -86,6 +90,9 @@ export function ExpenseFormModal({
   ];
   const currencies = ['UYU', 'USD'];
   const units = ['Unidades', 'Kilos', 'Litros', 'Hectáreas', 'Horas', 'Servicios'];
+
+  /** Símbolo de moneda para mostrar en precios (pesos/dólares) */
+  const currencySymbol = formData.currency === 'USD' ? 'US$' : '$';
 
   /**
    * Recalcular totales cuando cambian los items
@@ -162,6 +169,8 @@ export function ExpenseFormModal({
       setIsCustomCategory(false);
       setFormData({
         firm_id: firmId,
+        premise_id: null,
+        purchase_order_id: null,
         invoice_series: '',
         invoice_number: '',
         invoice_date: new Date().toISOString().split('T')[0],
@@ -235,8 +244,96 @@ export function ExpenseFormModal({
         .limit(50);
 
       if (lvData) setLivestockWorks(lvData);
+
+      // Cargar órdenes de compra aprobadas (para asociar a factura)
+      if (!isEditing) {
+        const { data: poData } = await supabase
+          .from('purchase_orders')
+          .select('id, order_number, order_date, supplier_name')
+          .eq('firm_id', firmId)
+          .eq('status', 'aprobada')
+          .order('order_date', { ascending: false })
+          .limit(100);
+        setPurchaseOrders(poData || []);
+      }
     } catch (err) {
       console.error('Error cargando datos asociados:', err);
+    }
+  };
+
+  /**
+   * Al seleccionar una orden de compra, pre-cargar proveedor e ítems
+   */
+  const handleSelectPurchaseOrder = async (orderId) => {
+    if (!orderId || orderId === '__ninguna__') {
+      setFormData(prev => ({
+        ...prev,
+        purchase_order_id: null,
+        premise_id: null,
+        provider_name: '',
+        provider_rut: '',
+        provider_email: '',
+        provider_phone: '',
+        provider_address: '',
+        concept: '',
+        items: [],
+        subtotal: 0,
+        iva_amount: 0,
+        total_amount: 0
+      }));
+      return;
+    }
+    setLoadingOrder(true);
+    try {
+      const { data: order, error } = await supabase
+        .from('purchase_orders')
+        .select(`
+          *,
+          purchase_order_items (*)
+        `)
+        .eq('id', orderId)
+        .single();
+
+      if (error) throw error;
+      if (!order) {
+        toast.error('Orden de compra no encontrada');
+        return;
+      }
+
+      const items = (order.purchase_order_items || []).map((item) => ({
+        id: `item_${item.id}_${Date.now()}`,
+        concept: item.item_description || '',
+        quantity: item.quantity || 0,
+        unit: item.unit || 'Unidades',
+        unit_price: item.unit_price || 0,
+        tax_rate: item.tax_rate ?? 22,
+        supplier_item_code: item.supplier_item_code || '',
+        purchase_order_item_id: item.id
+      }));
+
+      setFormData(prev => ({
+        ...prev,
+        purchase_order_id: order.id,
+        premise_id: order.premise_id || null,
+        provider_name: order.supplier_name || '',
+        provider_rut: order.supplier_rut || '',
+        provider_email: order.supplier_email || '',
+        provider_phone: order.supplier_phone || '',
+        provider_address: order.supplier_address || '',
+        concept: prev.concept || `Factura desde OC: ${order.order_number}`,
+        category: prev.category || 'Insumos',
+        items,
+        // Totales se recalculan en useEffect al cambiar items
+        subtotal: 0,
+        iva_amount: 0,
+        total_amount: 0
+      }));
+      toast.success(`Datos cargados desde orden ${order.order_number}`);
+    } catch (err) {
+      console.error('Error cargando orden:', err);
+      toast.error(err.message || 'Error al cargar la orden');
+    } finally {
+      setLoadingOrder(false);
     }
   };
 
@@ -444,6 +541,33 @@ export function ExpenseFormModal({
         </DialogHeader>
 
         <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Orden de compra (solo al crear) */}
+          {!isEditing && (
+            <div>
+              <Label htmlFor="purchase_order">Orden de compra (opcional)</Label>
+              <Select
+                value={formData.purchase_order_id || '__ninguna__'}
+                onValueChange={handleSelectPurchaseOrder}
+                disabled={isLoading || loadingOrder}
+              >
+                <SelectTrigger id="purchase_order" className="mt-1">
+                  <SelectValue placeholder="Seleccionar orden para pre-cargar datos..." />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="__ninguna__">Ninguna — factura manual</SelectItem>
+                  {purchaseOrders.map((po) => (
+                    <SelectItem key={po.id} value={po.id}>
+                      {po.order_number} — {po.supplier_name || 'Sin proveedor'}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+              <p className="text-xs text-slate-500 mt-1">
+                Si eliges una orden aprobada, se cargarán proveedor e ítems. Completa serie, número y fechas.
+              </p>
+            </div>
+          )}
+
           {/* Datos de Factura */}
           <div>
             <h3 className="font-semibold mb-3">Datos de la Factura</h3>
@@ -662,9 +786,9 @@ export function ExpenseFormModal({
                       <th className="px-3 py-2 text-left">Código Ítem Prov.</th>
                       <th className="px-3 py-2 text-right">Cantidad</th>
                       <th className="px-3 py-2 text-left">Unidad</th>
-                      <th className="px-3 py-2 text-right">P.U.</th>
+                      <th className="px-3 py-2 text-right">P.U. ({currencySymbol})</th>
                       <th className="px-3 py-2 text-right">IVA %</th>
-                      <th className="px-3 py-2 text-right">Subtotal</th>
+                      <th className="px-3 py-2 text-right">Subtotal ({currencySymbol})</th>
                       <th className="px-3 py-2 text-center">Acción</th>
                     </tr>
                   </thead>
@@ -677,9 +801,9 @@ export function ExpenseFormModal({
                           <td className="px-3 py-2">{item.supplier_item_code || '-'}</td>
                           <td className="px-3 py-2 text-right">{item.quantity.toFixed(2)}</td>
                           <td className="px-3 py-2">{item.unit}</td>
-                          <td className="px-3 py-2 text-right">${item.unit_price.toFixed(2)}</td>
+                          <td className="px-3 py-2 text-right">{currencySymbol} {item.unit_price.toFixed(2)}</td>
                           <td className="px-3 py-2 text-right">{item.tax_rate}%</td>
-                          <td className="px-3 py-2 text-right font-semibold">${itemSubtotal.toFixed(2)}</td>
+                          <td className="px-3 py-2 text-right font-semibold">{currencySymbol} {itemSubtotal.toFixed(2)}</td>
                           <td className="px-3 py-2 text-center">
                             <button
                               type="button"
@@ -767,17 +891,21 @@ export function ExpenseFormModal({
                 </div>
 
                 <div>
-                  <Label htmlFor="new_unit_price" className="text-xs">Precio Unitario *</Label>
-                  <Input
-                    id="new_unit_price"
-                    name="unit_price"
-                    type="number"
-                    value={currentItem.unit_price}
-                    onChange={handleCurrentItemChange}
-                    step="0.01"
-                    disabled={isLoading}
-                    className="text-sm"
-                  />
+                  <Label htmlFor="new_unit_price" className="text-xs">Precio unitario ({currencySymbol}) *</Label>
+                  <div className="flex items-center gap-1 mt-1">
+                    <span className="text-sm text-slate-500 shrink-0">{currencySymbol}</span>
+                    <Input
+                      id="new_unit_price"
+                      name="unit_price"
+                      type="number"
+                      value={currentItem.unit_price}
+                      onChange={handleCurrentItemChange}
+                      step="0.01"
+                      disabled={isLoading}
+                      className="text-sm"
+                      placeholder={formData.currency === 'USD' ? '0.00' : '0'}
+                    />
+                  </div>
                 </div>
 
                 <div className="col-span-2">
