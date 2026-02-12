@@ -1,4 +1,5 @@
 -- Add invoice and category support for remittances (SECTOR 3)
+-- Ejecutar en Supabase: SQL Editor → New query → Pegar y Run
 
 -- Remittances: link to purchase invoice (expenses)
 ALTER TABLE remittances

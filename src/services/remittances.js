@@ -235,10 +235,11 @@ export async function crearRemito(remittanceData, items) {
       purchase_order_id: remittanceData.purchase_order_id?.trim()
         ? remittanceData.purchase_order_id
         : null,
-      invoice_id: remittanceData.invoice_id?.trim()
-        ? remittanceData.invoice_id
-        : null,
     };
+
+    // No enviar invoice_id si la columna no existe (evita error de schema cache en Supabase).
+    // Para vincular remitos a facturas: ejecuta add_invoice_and_category_to_remittances.sql en Supabase.
+    delete sanitizedData.invoice_id;
 
     // Eliminar campos que no existen en la tabla remittances y que pueden causar problemas con triggers
     delete sanitizedData.user_id;
@@ -262,7 +263,7 @@ export async function crearRemito(remittanceData, items) {
         .insert([
           {
             ...sanitizedData,
-            status: sanitizedData.status || "pending",
+            status: sanitizedData.status || "in_transit",
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString(),
           },

@@ -67,7 +67,7 @@ export default function RemittanceFormModal({
   const [formData, setFormData] = useState({
     remittance_number: "",
     remittance_date: new Date().toISOString().split("T")[0],
-    status: "pending",
+    status: "in_transit",
     purchase_order_id: "",
     invoice_id: "",
     supplier_name: "",
@@ -548,7 +548,7 @@ export default function RemittanceFormModal({
       setFormData({
         remittance_number: "",
         remittance_date: new Date().toISOString().split("T")[0],
-        status: "pending",
+        status: "in_transit",
         purchase_order_id: "",
         invoice_id: "",
         supplier_name: "",
@@ -660,6 +660,7 @@ export default function RemittanceFormModal({
                     </SelectTrigger>
                     <SelectContent>
                       <SelectItem value="pending">Pendiente</SelectItem>
+                      <SelectItem value="in_transit">En tránsito</SelectItem>
                       <SelectItem value="sent">Enviado</SelectItem>
                       <SelectItem value="received">Recibido</SelectItem>
                       <SelectItem value="partially_received">
